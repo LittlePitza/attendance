@@ -18,6 +18,31 @@ cash). Any change to `public` can break it.
 - Shared catalogs (`empleados`, `departments`) → schema `public`
 - Identity functions and triggers → schema **`internal`**
 
+## The punch engine
+
+The state machine lives in **one** function, `internal.record_punch()`. The two
+public entry points are thin wrappers over it, and differ only in what they
+hand it:
+
+| Entry point | `occurred_at` it passes | `source` |
+|---|---|---|
+| `public.punch()` | `now()` -- the server's clock | `online` |
+| `public.sync_punches(jsonb)` | the client's time, parsed | `offline` |
+
+Two copies of the state machine would drift, and one would eventually accept a
+transition the other rejects. That is why the wrappers hold no rules.
+
+A workday moves `not_started -> working -> on_break -> working -> finished`.
+Anything else raises, in Spanish, because the employee reads it.
+
+`sync_punches()` sorts the batch chronologically before replaying it: a phone
+that was offline sends events in whatever order it queued them, and out of
+order almost all of them would be rejected as illegal transitions. The sort
+uses `internal.parse_timestamptz()`, which returns null instead of raising, and
+each event is applied inside its own `begin ... exception` block. Both exist so
+one malformed event is rejected on its own instead of taking the batch with it.
+
+
 ## Language
 
 **Code, structure and documentation in English. User-facing text in Spanish.**
@@ -119,13 +144,37 @@ No Docker is installed, and none is needed:
 npx supabase db push                      # apply migrations (remote)
 npx supabase functions deploy --use-api   # deploy functions without Docker
 npx supabase gen types typescript --linked > web/src/shared/supabase/types.gen.ts
-
-psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 \
-     -f supabase/tests/sql/punch_engine_test.sql
 ```
 
 Docker is only needed for `supabase start` and `functions serve`, which emulate
 everything locally. Optional.
+
+### Verifying
+
+```bash
+psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 \
+     -f supabase/tests/sql/punch_engine_test.sql
+```
+
+23 checks. Safe against the live database: the file wraps everything in a
+transaction that ends in `rollback`, and it also restores state inside the
+block, so it behaves even when pasted into the dashboard editor where there is
+no rollback. It raises and exits non-zero if any check fails.
+
+**There is no way to run a single check.** All 23 live in one `do $test$`
+block, and psql has no test selector. To narrow, comment out phases *inside*
+the block -- do not split the file, because the phases share the employees and
+the simulated token set up at the top.
+
+When touching grants, policies or `SECURITY DEFINER` functions, also run the
+four security invariants from `.github/workflows/ci.yml`. They are plain SQL:
+paste that `do $$ ... $$;` block into psql. CI fails on them, so it is cheaper
+to find out locally.
+
+```sql
+select * from attendance.free_plan_usage;   -- consumption against the quota
+```
+
 
 ## Applying a migration
 
@@ -138,6 +187,20 @@ ignores the filename. So:
 4. **Rename the file to `<version>_<name>.sql`.**
 
 Skip step 4 and the repository and the database drift apart silently.
+
+**An applied migration is immutable, comments included.** Supabase stores the
+raw SQL of every migration in `supabase_migrations.schema_migrations.statements`
+-- `--` comments and all. Editing a file that has already been applied does not
+just fail to reach the database, it makes the file disagree with that ledger,
+silently. Check before assuming:
+
+```sql
+select statements from supabase_migrations.schema_migrations
+ where version = '<version>';
+```
+
+If a comment in an applied migration is genuinely wrong, fix both sides or
+neither.
 
 ## After every migration
 
