@@ -1,17 +1,14 @@
 # Supabase CLI configuration for this project.
 #
-# This file mostly describes the LOCAL environment (`supabase start`), which
-# needs Docker and is not used today. It is versioned anyway for two reasons:
-# the CLI needs it to know which project this directory belongs to, and the day
-# someone installs Docker the local environment comes up matching the remote one
-# without guesswork.
-#
-# What DOES apply without Docker: project_id, which is what `supabase link` uses.
+# This file describes the disposable LOCAL environment only. Remote linking is
+# deliberately absent from version control. Use the repository's guarded npm
+# scripts so development commands cannot acquire `--linked` or `--db-url` by
+# accident.
 #
 # Note: the auth settings below are NOT applied automatically to the remote
 # project. Password hardening is configured in the dashboard. See docs/runbook.md.
 
-project_id = "cyjpucvvekzfpvvonuld"
+project_id = "attendance-local"
 
 [api]
 enabled = true

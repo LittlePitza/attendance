@@ -18,8 +18,9 @@ for real.
 | `SUPABASE_DB_URL` | Supabase dashboard → Project Settings → Database → Connection string (**Session** mode) |
 | `BACKUP_PASSPHRASE` | `openssl rand -base64 48`. **Also store it outside GitHub** |
 
-Without the first, backup, keepalive and CI all fail. Without the second, the
-backup refuses to upload anything rather than upload it unencrypted.
+Without the first, backup and keepalive fail. CI intentionally never receives
+it: pull requests run only against a disposable local database. Without the
+second, the backup refuses to upload anything rather than upload it unencrypted.
 
 ### 2. Harden Auth in the dashboard
 
@@ -94,7 +95,7 @@ green. A red heartbeat several days running means the project may get paused.
 
 ---
 
-## After every migration
+## After every approved production migration
 
 Mandatory, no exceptions:
 
@@ -127,13 +128,17 @@ select tablename, policyname from pg_policies
 ## Running the tests
 
 ```bash
-psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 \
-     -f supabase/tests/sql/punch_engine_test.sql
+npm ci
+npm test
+npm run db:verify
+npm run db:stop
 ```
 
-Safe against the live database: everything happens inside a transaction that
-ends in `ROLLBACK`, and the block also restores state on its own before
-finishing. It leaves no punches, no workdays and no account links behind.
+Tests run only against the ignored workspace under `.local/supabase`. The
+wrapper rejects extra arguments, constructs local-only CLI flags, and stops if
+Docker is unavailable; it has no remote fallback. Never paste the engine suite
+into the dashboard or pass `SUPABASE_DB_URL` to a test command. See
+[local-development.md](local-development.md) for the complete safety model.
 
 ---
 
@@ -193,14 +198,21 @@ it.
 
 ## Applying a migration
 
-There is no CLI set up (no linked `config.toml`, no database password), so
-migrations are applied through the Supabase MCP.
+This is a production change, not a development command. Do it only during an
+approved change window and only after `npm run db:verify` and CI are green.
 
-1. Write the SQL in `supabase/migrations/_pendiente_<name>.sql`.
-2. Apply it with `apply_migration` (name in `snake_case`, no timestamp).
-3. Read the assigned version with `list_migrations`.
-4. **Rename the file to `<version>_<name>.sql`.**
+1. Confirm the intended Supabase project in the dashboard and read its current
+   migration ledger. Do not infer the target from shell state or cached links.
+2. Take and verify an encrypted backup before a high-risk change.
+3. Re-read the exact new immutable file under `supabase/migrations/`; do not edit
+   an already applied migration and do not deploy test fixtures.
+4. Obtain explicit authorization for that target and migration.
+5. Apply exactly that migration using the approved deployment channel.
+6. Read the migration ledger back from the same target and confirm the assigned
+   version and statement content.
+7. Run the security and performance advisors and inspect new findings.
+8. Perform only non-destructive production smoke checks. The SQL test suites
+   remain local-only.
 
-Step 4 is not cosmetic: `apply_migration` assigns the version from the execution
-time, ignoring the filename. Skip it and the repository and the database drift
-apart silently. It has already happened once.
+Never use `db reset` on an operating project. Never make `db push` or
+`migration up` part of a pull request, local test script or unattended workflow.

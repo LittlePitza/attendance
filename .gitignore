@@ -4,6 +4,7 @@
 !.env.example
 supabase/.temp/
 supabase/.branches/
+.local/
 
 # Backups: never committed, not even encrypted
 dump/
@@ -16,10 +17,11 @@ dist/
 dist-ssr/
 *.local
 
-# Editors and OS
+# Editors, OS and local agent tooling
 .vscode/*
 !.vscode/settings.json
 .idea/
+.hermes/
 .DS_Store
 Thumbs.db
 desktop.ini

@@ -10,7 +10,7 @@ stand on its own.
 
 | | |
 |---|---|
-| **Status** | Database complete and verified · Client not started |
+| **Status** | Backend SQL implemented · Local safety harness added · Client not started |
 | **Database** | Supabase `pimsa_ti` (`cyjpucvvekzfpvvonuld`), Postgres 17, us-east-1 |
 | **Plan** | Free — see [docs/free-plan.md](docs/free-plan.md) |
 | **People** | 31 employees · 15 departments |
@@ -170,6 +170,7 @@ attendance/
 ├── .env.example                 variables; secrets do NOT go here
 │
 ├── docs/
+│   ├── local-development.md      isolated database workflow and safety guarantees
 │   ├── free-plan.md             Free plan quotas and how they are compensated
 │   ├── runbook.md               operations, incidents, first-time setup
 │   ├── original-plan.md         the initial architecture plan (Spanish, historical)
@@ -220,34 +221,47 @@ Two deliberate exceptions:
 
 ## Getting started
 
-Requirements: Node 24, git. **Docker is not needed** — only `supabase start` and
-`functions serve` need it, they emulate everything locally and are optional.
+Requirements: Node 24, npm, git and Docker Desktop with a running Linux-container
+daemon. Docker is mandatory for database verification because development never
+falls back to the shared remote project.
 
 ```bash
 git clone <repo> && cd attendance
-cp .env.example .env          # fill in VITE_SUPABASE_PUBLISHABLE_KEY
+npm ci
+npm test
+npm run db:verify
+npm run db:stop
 ```
 
-The steps that are still **missing** before the system can actually be used are
-in [docs/runbook.md](docs/runbook.md): GitHub Actions secrets, hardening Auth in
-the dashboard, and creating the test accounts.
+`db:verify` assembles `.local/supabase`, starts an isolated Postgres container,
+replays the immutable migration history over a synthetic shared-schema baseline,
+loads synthetic seed data, and runs the engine and security SQL suites. It does
+not accept a database URL or a project ref. See
+[docs/local-development.md](docs/local-development.md) for the complete workflow.
+
+The production-only setup still missing before rollout is tracked in
+[docs/runbook.md](docs/runbook.md). Those operations are deliberately separate
+from development and require explicit target verification and authorization.
 
 ### Commands
 
 ```bash
-# Apply migrations (remote, no Docker)
-npx supabase db push
+# Fast safety and orchestration tests; does not start a database
+npm test
 
-# Deploy Edge Functions without Docker
-npx supabase functions deploy --use-api
+# Build the generated local workspace without starting Docker
+npm run db:prepare
 
-# Regenerate TypeScript types from the database
-npx supabase gen types typescript --linked > web/src/shared/supabase/types.gen.ts
+# Rebuild the disposable database and run every SQL verification
+npm run db:verify
 
-# Run the engine verification (safe: it ROLLBACKs)
-psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 \
-     -f supabase/tests/sql/punch_engine_test.sql
+# Stop the local stack when finished
+npm run db:stop
 ```
+
+No routine development command deploys migrations, links a Supabase project or
+reads `SUPABASE_DB_URL`. Remote deployment is an explicit production change
+procedure, never a pull-request or local-test step.
 
 ---
 
@@ -280,9 +294,8 @@ HR — but it is not equivalent, and that is worth knowing.
 
 ## Verification
 
-The database passes **23 automated checks**
-(`supabase/tests/sql/punch_engine_test.sql`), including the ones that actually
-matter:
+The engine suite (`supabase/tests/sql/punch_engine_test.sql`) defines the checks
+that actually matter:
 
 - The official time is the server's, even when the client sends a date in 2001.
 - An `UPDATE` or `DELETE` on a punch fails, even from the service role.
@@ -294,8 +307,10 @@ matter:
 - Employee, manager, HR, admin and a role-less account each see exactly what
   they should.
 
-It is safe to run against the live database: everything happens inside a
-transaction that ends in `ROLLBACK`.
+Run it only through `npm run db:verify` against the disposable local database.
+The final `ROLLBACK` is defense in depth, not permission to test a live system.
+Verification is complete only when the generated database applies every
+migration and both SQL suites pass from a clean reset.
 
 ### Not verified yet
 

@@ -1,12 +1,5 @@
-# Continuous integration.
-#
-# With no Docker in the development environment, the SQL tests run against the
-# live database. That is safe: punch_engine_test.sql wraps everything in a
-# transaction that ends in ROLLBACK, and it also restores state inside the block
-# itself.
-#
-# Runs serially (concurrency) because two simultaneous runs would compete for
-# the same account link when simulating the token.
+# Continuous integration against a disposable local Supabase database.
+# Production credentials are intentionally unavailable to this workflow.
 
 name: CI
 
@@ -17,87 +10,35 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   sql:
-    name: SQL tests
+    name: Local database verification
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify the punch engine
-        env:
-          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: |
-          set -euo pipefail
-          if [ -z "${DB_URL:-}" ]; then
-            echo "::warning::Without SUPABASE_DB_URL the SQL tests cannot run."
-            echo "::warning::Set the secret under Settings > Secrets and variables > Actions."
-            exit 1
-          fi
-          psql "$DB_URL" -v ON_ERROR_STOP=1 \
-               -f supabase/tests/sql/punch_engine_test.sql
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
 
-  invariants:
-    name: Security invariants
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+      - name: Install pinned development tools
+        run: npm ci
 
-    steps:
-      - uses: actions/checkout@v4
+      - name: Verify local workspace safety guards
+        run: npm test
 
-      # These four checks are the core of the security promise. If any of them
-      # breaks, the migration that broke it must not reach main.
-      - name: Check
-        env:
-          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: |
-          set -euo pipefail
-          if [ -z "${DB_URL:-}" ]; then
-            echo "::warning::Missing SUPABASE_DB_URL." ; exit 1
-          fi
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -c "
-          do \$\$
-          declare v int;
-          begin
-            -- 1. The client writes no attendance table.
-            select count(*) into v from information_schema.role_table_grants
-             where table_schema='attendance' and grantee='authenticated'
-               and privilege_type <> 'SELECT';
-            if v > 0 then
-              raise exception 'authenticated holds % write privileges on attendance', v;
-            end if;
+      - name: Rebuild and verify the disposable database
+        run: npm run db:verify
 
-            -- 2. Coordinates are not readable by the client.
-            select count(*) into v from information_schema.column_privileges
-             where table_schema='attendance' and table_name='punches'
-               and grantee='authenticated' and column_name in ('geo_lat','geo_lng');
-            if v > 0 then
-              raise exception 'geo_lat/geo_lng are readable by authenticated';
-            end if;
-
-            -- 3. RLS enabled on every attendance table.
-            select count(*) into v from pg_tables
-             where schemaname='attendance' and not rowsecurity;
-            if v > 0 then
-              raise exception '% attendance tables without RLS', v;
-            end if;
-
-            -- 4. No wide-open permissive policy in public.
-            --    departments_read is intentional: department names are not
-            --    sensitive and the interface needs them everywhere.
-            select count(*) into v from pg_policies
-             where schemaname='public' and permissive='PERMISSIVE'
-               and (qual = 'true' or qual is null)
-               and policyname <> 'departments_read';
-            if v > 0 then
-              raise exception '% wide-open permissive policies in public', v;
-            end if;
-
-            raise notice 'All 4 invariants hold.';
-          end \$\$;
-          "
+      - name: Stop the local database
+        if: always()
+        run: npm run db:stop
