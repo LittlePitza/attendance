@@ -11,7 +11,7 @@ stand on its own.
 | | |
 |---|---|
 | **Status** | Backend SQL implemented · Local safety harness added · Client not started |
-| **Migrations** | 11 applied · 1 written and pending application |
+| **Migrations** | 11 applied · 2 written and pending application |
 | **Database** | Supabase `pimsa_ti` (`cyjpucvvekzfpvvonuld`), Postgres 17, us-east-1 |
 | **Plan** | Free — see [docs/free-plan.md](docs/free-plan.md) |
 | **People** | 31 employees · 15 departments |
@@ -142,6 +142,18 @@ The client does not write tables; it calls functions.
 | `punch(...)` | authenticated | Records a punch with the server's time |
 | `sync_punches(jsonb)` | authenticated | Offline ingestion in chronological order |
 | `heartbeat()` | authenticated | Liveness signal every 5 min while a workday is open |
+| `my_day()` | authenticated | The punch screen in one call: state, legal next actions, counters, schedule, punches |
+| `my_history(from, to)` | authenticated | The caller's own workdays, at most 92 days |
+| `team_day(date)` | authenticated | Every employee the caller may see, with their state that day |
+| `open_alerts(since, limit)` | authenticated | Open alerts within the caller's scope |
+
+The first five write and are `SECURITY DEFINER`, because they are the only write
+path and have to hold privileges the caller does not. **The last four are
+`SECURITY INVOKER`, and that is deliberate**: `internal.can_view_employee()`
+already decides who sees whom, and the column grants already withhold
+coordinates. A read function that elevated would have to reimplement both and
+could get either wrong. As it stands, a bug in a read function is a bug in what
+is displayed — it cannot become a leak.
 
 ### Roles
 
@@ -188,9 +200,9 @@ attendance/
 │
 ├── supabase/
 │   ├── config.toml              local CLI configuration
-│   ├── migrations/              12 migrations; the 12th is not applied yet
+│   ├── migrations/              13 migrations; the last two not applied yet
 │   └── tests/
-│       ├── sql/                 punch engine, alert engine, security invariants
+│       ├── sql/                 punch engine, alerts, read API, security
 │       └── fixtures/            synthetic baseline and seed; never real data
 │
 └── .github/
@@ -338,15 +350,34 @@ moment and cannot be tested against whatever time the suite happens to run:
 Run them only through `npm run db:verify` against the disposable local database.
 The final `ROLLBACK` is defense in depth, not permission to test a live system.
 Verification is complete only when the generated database applies every
-migration and all three SQL suites pass from a clean reset.
+migration and all four SQL suites pass from a clean reset.
+
+The read-API suite (`supabase/tests/sql/read_api_test.sql`) is the only one that
+switches role. Everything else runs as `postgres`, which owns the tables and so
+bypasses RLS: a policy that filtered nothing would have passed every other check
+here. This one does `set role authenticated`, sets the token claims, and calls:
+
+- An employee sees themselves and nobody else; a manager sees their department
+  and not the one next to it; HR sees everyone. Each scope is checked against a
+  case that must come back **empty**, because a scope that returns everything
+  looks identical to a working one until you ask it for something it should
+  refuse.
+- `select geo_lat` is refused, an `INSERT` into `attendance.punches` is refused,
+  and an `UPDATE` of the caller's own workday is refused.
+- Every state of the workday is walked, and at each one all four punch kinds are
+  attempted against the live engine. What it accepts has to be exactly what
+  `my_day()` offered — so the buttons the client draws cannot drift from the
+  rules that judge them.
 
 ### Not verified yet
 
-The tests simulate the token inside the database. **The end-to-end `curl` test
-is still missing**: with a real employee session and the publishable key,
-attempt a direct `INSERT` into `attendance.punches` through the REST API, and
-call `punch()` with a forged timestamp. Both must fail. Until that is done,
-rule 2 is verified by construction but not by experiment.
+**The end-to-end `curl` test is still missing.** The suite above proves the
+policies hold against the `authenticated` role inside the database; it does not
+prove that PostgREST, the publishable key and a real session compose the same
+way. With a genuine employee token: attempt a direct `INSERT` into
+`attendance.punches` over the REST API, and call `punch()` with a forged
+timestamp. Both must fail. Until that runs, the boundary is verified one layer
+short of where the client actually stands.
 
 ---
 
@@ -362,6 +393,7 @@ rule 2 is verified by construction but not by experiment.
 | ⬜ | User accounts and Auth hardening |
 | ✅ | Alert evaluator, thresholds per department, notification outbox |
 | ⬜ | Dispatcher Edge Function: drains the outbox over `config_correo` |
+| ✅ | Read API: the contract the PWA is written against |
 | ⬜ | PWA: login, punch screen, offline queue, service worker |
 | ⬜ | HR dashboard and administration |
 
