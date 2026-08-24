@@ -238,7 +238,7 @@ declare
   v_failed int;
   v_total  int;
 begin
-  select count(*) filter (where not passed), count(*) into v_failed, v_total
+  select count(*) filter (where passed is not true), count(*) into v_failed, v_total
     from test_results;
 
   if v_failed > 0 then
