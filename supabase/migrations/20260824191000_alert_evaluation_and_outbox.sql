@@ -518,6 +518,12 @@ begin
   -- Exponential backoff capped at an hour: 2, 4, 8, 16, 32, 60, 60 minutes.
   -- After eight attempts it stops on its own instead of retrying a broken
   -- mailbox until the end of time. The row stays as evidence of what failed.
+  --
+  -- `status <> 'sent'` is not defensive noise. Without it, a dispatcher that
+  -- reports a failure for something it already delivered would move the row
+  -- back to 'pending' while delivered_at stayed set, and the check constraint
+  -- that ties those two together would raise -- turning a confused caller into
+  -- a constraint error. A delivery that already happened wins.
   update attendance.notification_outbox o
      set status = case
                     when o.attempts >= v_max_attempts then 'failed'
@@ -527,10 +533,15 @@ begin
            mins => least(60, power(2, greatest(o.attempts, 1))::integer)),
          last_error = left(p_error, 2000)
    where o.id = p_id
+     and o.status <> 'sent'
   returning * into v_row;
 
   if v_row.id is null then
-    raise exception 'Notification % does not exist', p_id using errcode = '02000';
+    select * into v_row from attendance.notification_outbox where id = p_id;
+
+    if v_row.id is null then
+      raise exception 'Notification % does not exist', p_id using errcode = '02000';
+    end if;
   end if;
 
   return v_row;
