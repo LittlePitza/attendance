@@ -43,7 +43,10 @@ jobs:
         # which move between releases. The verification step below asserts
         # against this version's output, so bump the two together -- `npm test`
         # fails when they disagree rather than leaving that to this comment.
-        uses: supabase/setup-cli@v1
+        #
+        # The action's own major and the CLI version it installs are separate
+        # things: this is @v3 installing 2.115.0.
+        uses: supabase/setup-cli@v3
         with:
           version: 2.115.0
 
