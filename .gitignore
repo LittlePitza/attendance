@@ -17,11 +17,10 @@ dist/
 dist-ssr/
 *.local
 
-# Editors, OS and local agent tooling
+# Editors and OS
 .vscode/*
 !.vscode/settings.json
 .idea/
-.hermes/
 .DS_Store
 Thumbs.db
 desktop.ini
