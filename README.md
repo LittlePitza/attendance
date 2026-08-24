@@ -169,25 +169,35 @@ attendance/
 ├── README.md                    this file
 ├── CONTRIBUTING.md              working guide: rules, conventions, workflow
 ├── SECURITY.md                  what counts as a vulnerability, how to report
+├── LICENSE                      proprietary; internal use only
+├── package.json                 the pinned CLI and the db:* commands
 ├── .env.example                 variables; secrets do NOT go here
 │
 ├── docs/
-│   ├── local-development.md      isolated database workflow and safety guarantees
+│   ├── local-development.md     isolated database workflow and safety guarantees
 │   ├── free-plan.md             Free plan quotas and how they are compensated
 │   ├── runbook.md               operations, incidents, first-time setup
 │   ├── original-plan.md         the initial architecture plan (Spanish, historical)
 │   └── decisions/               ADRs
 │
+├── scripts/
+│   └── local-supabase.mjs       the guarded workflow: one action, no remote path
+│
+├── tests/
+│   └── local-supabase.test.mjs  proves that workflow cannot reach production
+│
 ├── supabase/
-│   ├── config.toml              CLI configuration
+│   ├── config.toml              local CLI configuration
 │   ├── migrations/              12 migrations; the 12th is not applied yet
-│   └── tests/sql/               punch engine, alert engine, security invariants
+│   └── tests/
+│       ├── sql/                 punch engine, alert engine, security invariants
+│       └── fixtures/            synthetic baseline and seed; never real data
 │
 └── .github/
     ├── workflows/
     │   ├── backup.yml           daily encrypted backup
     │   ├── keepalive.yml        prevents pausing for inactivity
-    │   └── ci.yml               tests + security invariants
+    │   └── ci.yml               disposable local database verification
     ├── dependabot.yml           keeps the pinned actions current
     └── PULL_REQUEST_TEMPLATE.md blast radius + migration checklist
 ```

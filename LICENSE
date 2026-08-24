@@ -1,0 +1,25 @@
+Copyright (c) 2026 Plásticos PIMSA. All rights reserved.
+
+This software is proprietary and confidential. It is not open source, and no
+open source licence is granted or implied by its presence in a version control
+system.
+
+Permission is granted to employees and contractors of the copyright holder to
+use, copy and modify this software solely for the internal operation of the
+copyright holder's own systems, and only while that engagement lasts.
+
+No other permission is granted. In particular, and without limiting the above,
+the software may not be redistributed, published, sublicensed, sold, or made
+available to any third party, in source or compiled form, in whole or in part,
+without prior written permission from the copyright holder.
+
+This repository describes a system that processes personal data of employees.
+Access to the code is not access to that data, and neither is a reason to
+export it. See SECURITY.md.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
