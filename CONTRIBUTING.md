@@ -136,57 +136,60 @@ administrator account that is not an employee).
 `internal.can_view_employee()` is the single place that decides who sees whose
 data. Keep it that way.
 
-## Commands
+## Local development
 
-No Docker is installed, and none is needed:
-
-```bash
-npx supabase db push                      # apply migrations (remote)
-npx supabase functions deploy --use-api   # deploy functions without Docker
-npx supabase gen types typescript --linked > web/src/shared/supabase/types.gen.ts
-```
-
-Docker is only needed for `supabase start` and `functions serve`, which emulate
-everything locally. Optional.
-
-### Verifying
+Requirements: Node 24, npm, git and Docker Desktop with a running
+Linux-container daemon. Install the pinned Supabase CLI and run the guarded
+workflow:
 
 ```bash
-psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 \
-     -f supabase/tests/sql/punch_engine_test.sql
+npm ci
+npm test
+npm run db:verify
+npm run db:stop
 ```
 
-23 checks. Safe against the live database: the file wraps everything in a
-transaction that ends in `rollback`, and it also restores state inside the
-block, so it behaves even when pasted into the dashboard editor where there is
-no rollback. It raises and exits non-zero if any check fails.
+`npm test` verifies the assembler, command allowlist, local-only configuration,
+portable CLI launcher and documentation guardrails. `npm run db:verify` then
+builds `.local/supabase`, starts local Postgres, resets it from all migrations
+and synthetic fixtures, and runs both SQL suites.
 
-**There is no way to run a single check.** All 23 live in one `do $test$`
-block, and psql has no test selector. To narrow, comment out phases *inside*
-the block -- do not split the file, because the phases share the employees and
-the simulated token set up at the top.
+The wrapper accepts one known action and constructs every Supabase argument
+itself. There is no `--db-url`, link command, project selector or remote fallback.
+If Docker is unavailable, it stops before invoking Supabase. Full details are in
+[docs/local-development.md](docs/local-development.md).
 
-When touching grants, policies or `SECURITY DEFINER` functions, also run the
-four security invariants from `.github/workflows/ci.yml`. They are plain SQL:
-paste that `do $$ ... $$;` block into psql. CI fails on them, so it is cheaper
-to find out locally.
+Never run `db push`, `migration up`, `db reset` or test SQL against a linked or
+remote project as part of development. A transaction rollback is not a safety
+boundary for an operating database.
 
-```sql
-select * from attendance.free_plan_usage;   -- consumption against the quota
+### Focused commands
+
+```bash
+npm run db:prepare  # assemble the ignored local workspace
+npm run db:start    # start only the local database service
+npm run db:reset    # replay migrations and synthetic seed locally
+npm run db:test     # run engine and security SQL suites locally
+npm run db:verify   # start, reset and test in one command
+npm run db:stop     # stop this repository's local stack
 ```
 
+## Creating a migration
 
-## Applying a migration
+1. Never edit an applied migration.
+2. Add a new canonical file named
+   `supabase/migrations/YYYYMMDDHHMMSS_short_description.sql`.
+3. Keep the filename, identifiers and technical comments in English. Keep
+   employee-facing error messages in Spanish.
+4. If the change depends on a new object owned by `ti-hub`, update only the
+   minimal contract in `supabase/tests/fixtures/shared_schema_test_baseline.sql`.
+   Never copy production data or move that fixture into canonical migrations.
+5. Run `npm run db:verify` from a clean generated workspace.
+6. Review the migration's blast radius, especially any object in `public`.
 
-`apply_migration` (Supabase MCP) assigns the version from the execution time and
-ignores the filename. So:
-
-1. Write the SQL in `supabase/migrations/_pendiente_<name>.sql`.
-2. Apply it with `apply_migration`.
-3. Read the assigned version with `list_migrations`.
-4. **Rename the file to `<version>_<name>.sql`.**
-
-Skip step 4 and the repository and the database drift apart silently.
+Remote application is not a contribution step. It is an authorized production
+change and follows [docs/runbook.md](docs/runbook.md) only after local and CI
+verification are green.
 
 **An applied migration is immutable, comments included.** Supabase stores the
 raw SQL of every migration in `supabase_migrations.schema_migrations.statements`
@@ -202,9 +205,10 @@ select statements from supabase_migrations.schema_migrations
 If a comment in an applied migration is genuinely wrong, fix both sides or
 neither.
 
-## After every migration
+## After every approved production migration
 
-Always run the advisors and leave them with no new findings:
+After read-back confirms the expected migration version on the intended target,
+run the advisors and leave them with no new findings:
 
 ```
 get_advisors(project_id, type: "security")

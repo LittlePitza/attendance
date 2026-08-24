@@ -5,22 +5,20 @@
 --
 -- How to run it:
 --
---   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/sql/punch_engine_test.sql
+--   npm run db:test
 --
--- Safe to run against the live database: EVERYTHING happens inside a
--- transaction that ends in ROLLBACK. No punch, no workday and no account link
--- survives it. Deliberately not pgTAP: installing it would publish hundreds of
--- test functions as REST endpoints in `public`, and without Docker there is no
--- local environment to isolate it in.
+-- Run only against the disposable local database assembled by
+-- scripts/local-supabase.mjs. Everything also happens inside a transaction that
+-- ends in ROLLBACK, so no punch, workday or account link survives the test.
+-- Deliberately not pgTAP: this is plain SQL that can run through
+-- `supabase db query` without installing test functions in `public`.
 --
--- Fails loudly: if a single check does not pass it raises an exception and psql
--- exits non-zero, which is what CI needs.
+-- Fails loudly: if a single check does not pass it raises an exception and the
+-- Supabase CLI exits non-zero, which is what CI needs.
 --
 -- Note on language: assertion names are in English, but a few literals stay in
 -- Spanish on purpose -- they match the error messages the database raises for
 -- employees, which are written in Spanish by design.
-
-\set ON_ERROR_STOP on
 
 begin;
 
@@ -50,10 +48,8 @@ begin
     raise exception 'Missing baseline data: need at least 1 account and 2 active employees';
   end if;
 
-  -- The original role is captured so it can be handed back at the end. The
-  -- file's ROLLBACK would undo it anyway, but this keeps the test correct if
-  -- someone runs the block on its own from the dashboard SQL editor, where
-  -- there is no rollback. Leaving the admin account as 'hr' would lock it out.
+  -- The original synthetic role is captured so each phase remains explicit,
+  -- even though the outer ROLLBACK also restores it.
   select role into v_original_role from public.user_roles where auth_user_id = v_uid;
 
   -- ========================================================= PHASE A: online ===
@@ -228,8 +224,6 @@ end
 $test$;
 
 -- Readable report.
-\echo ''
-\echo '=== Punch engine verification ==='
 select n,
        name     as check_name,
        expected,

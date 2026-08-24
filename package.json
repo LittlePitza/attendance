@@ -1,0 +1,22 @@
+{
+  "name": "attendance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "packageManager": "npm@12.0.2",
+  "scripts": {
+    "test": "node --test tests/local-supabase.test.mjs",
+    "db:prepare": "node scripts/local-supabase.mjs prepare",
+    "db:start": "node scripts/local-supabase.mjs start",
+    "db:reset": "node scripts/local-supabase.mjs reset",
+    "db:test": "node scripts/local-supabase.mjs test",
+    "db:verify": "node scripts/local-supabase.mjs verify",
+    "db:stop": "node scripts/local-supabase.mjs stop"
+  },
+  "devDependencies": {
+    "supabase": "2.115.0"
+  }
+}
