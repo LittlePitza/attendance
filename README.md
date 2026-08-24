@@ -1,116 +1,119 @@
-# Checador de home office
+# Home Office Time Clock
 
-Registro de asistencia para el personal remoto de **Plásticos PIMSA**.
-El empleado marca entrada, pausa, regreso y salida desde su casa; **la hora
-oficial la pone el servidor, no su computadora**; RH ve en vivo quién está
-trabajando y recibe alertas cuando alguien no marcó dentro de su ventana.
+Attendance tracking for **Plásticos PIMSA**'s remote staff. Employees clock in,
+start and end breaks, and clock out from home; **the official timestamp comes
+from the server, not from their computer**; HR sees who is working in real time
+and gets alerts when someone misses their window.
 
-El registro tiene que ser defendible: si mañana hay una aclaración de nómina,
-la bitácora debe sostenerse sola.
+The record has to hold up: if a payroll dispute comes up tomorrow, the log must
+stand on its own.
 
 | | |
 |---|---|
-| **Estado** | Base de datos completa y verificada · Cliente sin empezar |
-| **Base** | Supabase `pimsa_ti` (`cyjpucvvekzfpvvonuld`), Postgres 17, us-east-1 |
-| **Plan** | Gratuito — ver [docs/free-plan.md](docs/free-plan.md) |
-| **Personas** | 31 empleados · 15 departamentos |
-| **Zona horaria** | `America/Mexico_City` |
+| **Status** | Database complete and verified · Client not started |
+| **Database** | Supabase `pimsa_ti` (`cyjpucvvekzfpvvonuld`), Postgres 17, us-east-1 |
+| **Plan** | Free — see [docs/free-plan.md](docs/free-plan.md) |
+| **People** | 31 employees · 15 departments |
+| **Time zone** | `America/Mexico_City` |
 
 ---
 
-## Lo primero que hay que entender
+## Read this first
 
-**Esta base no está vacía.** La comparte con la mesa de ayuda de TI, que está
-en producción: 45 tickets, inventario de 18 equipos, responsivas, compras y
-caja chica. Ese sistema es [`ti-hub`](https://github.com/LittlePitza/ti-hub),
-vive en otro repositorio y se despliega en Vercel.
+**This database is not empty.** It is shared with the IT help desk, which is in
+production: 45 tickets, an inventory of 18 machines, equipment handover forms,
+purchasing and petty cash. That system is
+[`ti-hub`](https://github.com/LittlePitza/ti-hub), it lives in a separate
+repository, and it deploys to Vercel.
 
-Consecuencia práctica: **cualquier cambio en el esquema `public` puede romper
-un sistema en producción que no está en este repositorio.** Por eso las tablas
-de la mesa de ayuda siguen en español y no se tocan.
+The practical consequence: **any change to the `public` schema can break a
+production system that is not in this repository.** That is why the help desk
+tables keep their Spanish names and are left alone.
 
 ---
 
-## Cómo está pensado
+## How it is built
 
-Tres capas con una frontera que no se cruza:
+Three layers with a boundary that is never crossed:
 
-| Capa | Responsabilidad | Regla |
+| Layer | Responsibility | Rule |
 |---|---|---|
-| **Postgres** | Reglas de negocio, sello de tiempo, invariantes | Es la única que decide |
-| **Edge Functions** (Deno) | Hablar con el mundo: correo, altas, exportar | **Nunca** contiene reglas de negocio |
-| **PWA** (React) | Interfaz | Cero lógica: llama funciones y pinta datos |
+| **Postgres** | Business rules, timestamping, invariants | The only one that decides |
+| **Edge Functions** (Deno) | Talk to the outside world: email, user provisioning, exports | **Never** holds business rules |
+| **PWA** (React) | Interface | No logic: calls functions and renders data |
 
-No hay servidor de aplicación. Se descartó un motor en Python porque las Edge
-Functions de Supabase sólo corren TypeScript sobre Deno — y el resultado quedó
-más fuerte, no más débil: una regla escrita en una función `SECURITY DEFINER`
-no se puede evadir ni con un token válido ni pegándole directo a la API REST,
-porque **el cliente no tiene permiso de escritura sobre ninguna tabla**.
+There is no application server. A Python engine was ruled out because Supabase
+Edge Functions only run TypeScript on Deno — and the result came out stronger,
+not weaker: a rule written in a `SECURITY DEFINER` function cannot be bypassed
+with a valid token or by hitting the REST API directly, because **the client
+has no write privilege on any table**.
 
-### Las cinco reglas que sostienen todo
+### The five rules that hold everything up
 
-1. **La hora la pone el servidor.** `occurred_at := now()`. Lo que mande el
-   cliente se guarda aparte, en `client_reported_at`, sólo para auditar.
-2. **El cliente no escribe tablas.** `authenticated` tiene `SELECT` filtrado
-   por RLS y **cero** `INSERT`/`UPDATE`/`DELETE`. El único camino son las
-   funciones.
-3. **El `employee_id` sale del token**, nunca de un parámetro. Así nadie marca
-   en nombre de otro.
-4. **Los marcajes son append-only**, por disparador y no sólo por permisos —
-   el rol de servicio los tiene de todos modos. Las correcciones son filas
-   nuevas en `adjustments`, con motivo obligatorio.
-5. **Las coordenadas no son legibles.** No se revocan: nunca se otorgan.
+1. **The server sets the time.** `occurred_at := now()`. Whatever the client
+   sends is stored separately, in `client_reported_at`, for auditing only.
+2. **The client does not write tables.** `authenticated` gets `SELECT` filtered
+   by RLS and **zero** `INSERT`/`UPDATE`/`DELETE`. Functions are the only way in.
+3. **`employee_id` comes from the token**, never from a parameter. Nobody can
+   punch on someone else's behalf.
+4. **Punches are append-only**, enforced by a trigger and not just by
+   privileges — the service role has those anyway. Corrections are new rows in
+   `adjustments`, with a mandatory reason.
+5. **Coordinates are not readable.** They are not revoked; they are never
+   granted in the first place.
 
-### El marcaje sin conexión
+### Offline punching
 
-Es el caso incómodo y se resolvió sin fingir que no existe. La PWA encola en
-IndexedDB y al reconectar manda el lote a `sync_punches()`, que:
+This is the awkward case, and it was solved without pretending it does not
+exist. The PWA queues punches in IndexedDB and, on reconnect, sends the batch to
+`sync_punches()`, which:
 
-- lo **ordena cronológicamente** antes de procesarlo, no por orden de llegada;
-- procesa **cada evento en su propia subtransacción**, para que uno inválido no
-  tumbe el lote;
-- guarda la hora del cliente **etiquetada como tal** (`source = 'offline'`), con
-  el desvío de reloj y el retraso reales.
+- **sorts it chronologically** before processing, not by arrival order;
+- processes **each event in its own subtransaction**, so one invalid event does
+  not take down the batch;
+- stores the client's time **labelled as such** (`source = 'offline'`), with the
+  real clock skew and sync delay.
 
-Si el reloj está desviado más de 2 minutos, o el marcaje llega más de 12 horas
-tarde, entra con `needs_review = true` y aparece marcado para que RH lo apruebe.
-**Un marcaje offline es la palabra del empleado**: el sistema lo acepta, lo
-etiqueta y lo pone a la vista. Ocultarlo haría inútil todo el registro.
+If the clock is off by more than 2 minutes, or the punch arrives more than 12
+hours late, it lands with `needs_review = true` and shows up flagged for HR to
+approve. **An offline punch is the employee's word**: the system accepts it,
+labels it, and puts it in plain sight. Hiding that would make the whole record
+worthless.
 
 ---
 
-## El modelo de datos
+## Data model
 
-### Esquema `attendance` — el checador
+### Schema `attendance` — the time clock
 
-| Tabla | Qué guarda |
+| Table | What it holds |
 |---|---|
-| `schedules` | Ventanas de horario. Precedencia: empleado > departamento > global |
-| `workdays` | Una fila por persona y día. El estado que lee el tablero |
-| `punches` | Los marcajes. **Append-only** |
-| `adjustments` | Correcciones de RH, con motivo obligatorio |
-| `alerts` | Alertas para RH. Único `(empleado, fecha, tipo)` = idempotentes |
-| `alert_rules` | Qué alertas están activas y con qué umbral, por departamento |
-| `devices` | Equipos desde los que marca cada quien. Revocables |
-| `consents` | Consentimiento del aviso de privacidad, por persona y versión |
-| `audit_events` | Bitácora: toda acción administrativa, incluida cada consulta de coordenadas |
+| `schedules` | Schedule windows. Precedence: employee > department > global |
+| `workdays` | One row per person per day. The state the dashboard reads |
+| `punches` | The punches. **Append-only** |
+| `adjustments` | HR corrections, with a mandatory reason |
+| `alerts` | Alerts for HR. Unique `(employee, date, kind)` makes them idempotent |
+| `alert_rules` | Which alerts are active and at what threshold, per department |
+| `devices` | Devices each person punches from. Revocable |
+| `consents` | Privacy notice consent, per person and version |
+| `audit_events` | Audit log: every administrative action, including each lookup of coordinates |
 
-### Esquema `internal` — identidad y disparadores
+### Schema `internal` — identity and triggers
 
-No expuesto en la API, y **no debe agregarse a "Exposed schemas"**.
-`caller_role()`, `caller_employee_id()`, `caller_department_id()`,
-`can_view_employee()`, `record_punch()`, `resolve_schedule()` y los disparadores.
+Not exposed through the API, and **must not be added to "Exposed schemas"**.
+Holds `caller_role()`, `caller_employee_id()`, `caller_department_id()`,
+`can_view_employee()`, `record_punch()`, `resolve_schedule()` and the triggers.
 
-### Esquema `public` — lo compartido
+### Schema `public` — shared ground
 
-Las 19 tablas de la mesa de ayuda (en español, intocables) más:
+The 19 help desk tables (Spanish, untouchable) plus:
 
-- `departments` — catálogo normalizado
-- `user_roles` — rol por **cuenta**, no por persona
-- `empleados` — preexistente; este proyecto le añadió `department_id` y
-  `auth_user_id`
+- `departments` — normalized catalog
+- `user_roles` — role per **account**, not per person
+- `empleados` — pre-existing; this project added `department_id` and
+  `auth_user_id` to it
 
-### La máquina de estados
+### The state machine
 
 ```
 not_started ──clock_in──▶ working ◀──break_end── on_break
@@ -120,208 +123,220 @@ not_started ──clock_in──▶ working ◀──break_end── on_break
                           └──clock_out──▶ finished
 ```
 
-`clock_out` desde `on_break` cierra la pausa: es un descuido común y rechazarlo
-sólo dejaría la jornada colgada. Todo lo demás fuera de orden se rechaza con un
-mensaje que se puede leer en pantalla.
+`clock_out` from `on_break` closes the break: forgetting to end a break is a
+common slip, and rejecting it would only leave the workday hanging. Everything
+else out of order is rejected with a message meant to be read on screen.
 
 ---
 
-## La API
+## The API
 
-El cliente no escribe tablas: llama funciones.
+The client does not write tables; it calls functions.
 
-| Función | Quién | Qué hace |
+| Function | Who | What it does |
 |---|---|---|
-| `my_profile()` | autenticado | Su rol y su ficha. Única RPC de identidad publicada |
-| `server_time()` | autenticado | Hora oficial, para calcular el desvío de reloj |
-| `punch(...)` | autenticado | Marca con la hora del servidor |
-| `sync_punches(jsonb)` | autenticado | Ingesta offline en orden cronológico |
-| `heartbeat()` | autenticado | Señal de vida cada 5 min con jornada abierta |
+| `my_profile()` | authenticated | Their role and employee record. The only identity RPC published |
+| `server_time()` | authenticated | Official time, so the client can compute its clock skew |
+| `punch(...)` | authenticated | Records a punch with the server's time |
+| `sync_punches(jsonb)` | authenticated | Offline ingestion in chronological order |
+| `heartbeat()` | authenticated | Liveness signal every 5 min while a workday is open |
 
 ### Roles
 
-En `public.user_roles`, uno por **cuenta** — no por persona, porque existe una
-cuenta administradora que no es empleado.
+In `public.user_roles`, one per **account** — not per person, because there is
+an administrator account that is not an employee.
 
-| Rol | Alcance |
+| Role | Scope |
 |---|---|
-| `employee` | Sólo sus propios registros |
-| `manager` | Su departamento |
-| `hr` | Todos, más ajustes y alertas |
-| `admin` | Todo, más configuración |
-| `guest` | Por defecto si no tiene rol: **sin permisos** |
+| `employee` | Only their own records |
+| `manager` | Their department |
+| `hr` | Everyone, plus adjustments and alerts |
+| `admin` | Everything, plus configuration |
+| `guest` | Default when no role is assigned: **no access** |
 
-Una sola función, `internal.can_view_employee()`, decide quién ve los datos de
-quién. Está en un solo lugar a propósito: cuando la regla vivía duplicada en
-varias políticas, podían separarse sin que nadie lo notara.
+A single function, `internal.can_view_employee()`, decides who can see whose
+data. It lives in one place on purpose: when the rule was duplicated across
+several policies, they could drift apart without anyone noticing.
 
 ---
 
-## Estructura del repositorio
+## Repository layout
 
 ```
 checador/
-├── README.md                    este archivo
-├── CLAUDE.md                    guía para trabajar en el proyecto
-├── .env.example                 variables; los secretos NO van aquí
+├── README.md                    this file
+├── CLAUDE.md                    working guide for this project
+├── .env.example                 variables; secrets do NOT go here
 │
 ├── docs/
-│   ├── free-plan.md             cuotas del plan gratuito y cómo se compensan
-│   ├── runbook.md               operación, incidentes, puesta en marcha
-│   ├── original-plan.md         el plan de arquitectura inicial
+│   ├── free-plan.md             Free plan quotas and how they are compensated
+│   ├── runbook.md               operations, incidents, first-time setup
+│   ├── original-plan.md         the initial architecture plan (Spanish, historical)
 │   └── decisions/               ADRs
 │
 ├── supabase/
-│   ├── config.toml              configuración del CLI
-│   ├── migrations/              11 migraciones, todas aplicadas
-│   └── tests/sql/               verificación del motor (23 comprobaciones)
+│   ├── config.toml              CLI configuration
+│   ├── migrations/              11 migrations, all applied
+│   └── tests/sql/               engine verification (23 checks)
 │
 └── .github/workflows/
-    ├── backup.yml               respaldo diario cifrado
-    ├── keepalive.yml            evita la pausa por inactividad
-    └── ci.yml                   pruebas + invariantes de seguridad
+    ├── backup.yml               daily encrypted backup
+    ├── keepalive.yml            prevents pausing for inactivity
+    └── ci.yml                   tests + security invariants
 ```
 
-Falta por crear, cuando toque: `web/` (la PWA) y `supabase/functions/`
-(las Edge Functions). No hay carpetas vacías esperándolos porque git no
-versiona directorios vacíos y desaparecerían al clonar.
+Still to be created, when the time comes: `web/` (the PWA) and
+`supabase/functions/` (the Edge Functions). There are no empty folders waiting
+for them because git does not track empty directories — they would vanish on
+clone.
 
 ---
 
-## Idioma
+## Language
 
-**Código y estructura en inglés. Comentarios y documentación en español.**
+**Code, structure and documentation in English. User-facing text in Spanish.**
 
-- Esquemas, tablas, columnas, funciones, índices, políticas, archivos: inglés.
-- Valores tipo enum (`'clock_in'`, `'working'`, `'hr'`): inglés.
-- Comentarios del SQL, `COMMENT ON` y `docs/`: español.
-- **Mensajes de error que ve el empleado: español.** Los lee gente que no habla
-  inglés.
+- Schemas, tables, columns, functions, indexes, policies, filenames: English.
+- Enum-style values (`'clock_in'`, `'working'`, `'hr'`): English.
+- Documentation in `docs/` and this README: English.
+- **Error messages the employee sees: Spanish.** They are read by people who do
+  not speak English, so `punch()` raises `'Ya registraste tu entrada hoy'`, not
+  an English string.
 
-La excepción: las 19 tablas de la mesa de ayuda siguen en español porque
-`ti-hub` depende de ellas. Por eso el modelo está mezclado a propósito —
-`attendance.punches.employee_id` apunta a `public.empleados.id`. No es
-incoherencia, es la frontera con lo que ya existía.
+Two deliberate exceptions:
+
+- The 19 help desk tables keep their Spanish names because `ti-hub` depends on
+  them. That is why the model is mixed on purpose —
+  `attendance.punches.employee_id` points at `public.empleados.id`. It is not
+  sloppiness, it is the boundary with what was already there.
+- SQL comments inside `supabase/migrations/` are still in Spanish, left over
+  from an earlier decision. See *Known debt* below.
 
 ---
 
-## Puesta en marcha
+## Getting started
 
-Requisitos: Node 24, git. **No hace falta Docker** — sólo lo necesitan
-`supabase start` y `functions serve`, que emulan todo localmente y son
-opcionales.
+Requirements: Node 24, git. **Docker is not needed** — only `supabase start` and
+`functions serve` need it, they emulate everything locally and are optional.
 
 ```bash
 git clone <repo> && cd checador
-cp .env.example .env          # rellenar VITE_SUPABASE_PUBLISHABLE_KEY
+cp .env.example .env          # fill in VITE_SUPABASE_PUBLISHABLE_KEY
 ```
 
-Después, los pasos que **faltan** para que el sistema se use de verdad están en
-[docs/runbook.md](docs/runbook.md): secretos de GitHub Actions, endurecimiento
-de Auth en el panel, y crear las cuentas de prueba.
+The steps that are still **missing** before the system can actually be used are
+in [docs/runbook.md](docs/runbook.md): GitHub Actions secrets, hardening Auth in
+the dashboard, and creating the test accounts.
 
-### Comandos
+### Commands
 
 ```bash
-# Aplicar migraciones (remoto, sin Docker)
+# Apply migrations (remote, no Docker)
 npx supabase db push
 
-# Desplegar Edge Functions sin Docker
+# Deploy Edge Functions without Docker
 npx supabase functions deploy --use-api
 
-# Regenerar los tipos de TypeScript desde la base
+# Regenerate TypeScript types from the database
 npx supabase gen types typescript --linked > web/src/shared/supabase/types.gen.ts
 
-# Correr la verificación del motor (seguro: hace ROLLBACK)
+# Run the engine verification (safe: it ROLLBACKs)
 psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 \
      -f supabase/tests/sql/punch_engine_test.sql
 ```
 
 ---
 
-## Plan gratuito
+## Free plan
 
-Decisión tomada: **el proyecto se queda en el plan gratuito.** El detalle
-completo está en [docs/free-plan.md](docs/free-plan.md); lo esencial:
+Decision made: **this project stays on Supabase's Free plan.** Full detail is in
+[docs/free-plan.md](docs/free-plan.md); the essentials:
 
-**Las cuotas de volumen sobran.** La base usa 14 MB de 500. Con 31 personas
-marcando cuatro veces al día, ningún límite de tamaño, egress, invocaciones o
-Realtime se acerca al tope.
+**Volume quotas are not the problem.** The database uses 14 MB of 500. With 31
+people punching four times a day, no limit on size, egress, invocations or
+Realtime comes close.
 
-**Los dos problemas reales no se resuelven usando menos:**
+**The two real problems cannot be solved by using less:**
 
-| Problema | Compensación |
+| Problem | Compensation |
 |---|---|
-| No hay respaldos, ni automáticos ni descargables | `backup.yml`: volcado diario **cifrado** como artefacto |
-| Pausa a los 7 días de poca actividad | `keepalive.yml`: consulta diaria |
+| No backups at all, automatic or downloadable | `backup.yml`: daily **encrypted** dump as an artifact |
+| Paused after 7 days of low activity | `keepalive.yml`: one query per day |
 
-**Y lo que se poda solo**, porque a 500 MB "ya veremos" no es estrategia:
-`cron.job_run_details` a 7 días, `audit_events` a 24 meses, coordenadas a 90
-días. `punches`, `workdays` y `adjustments` **no se podan nunca** — son el
-registro laboral.
+**And what grows without a ceiling is already pruned**, because at 500 MB
+"we'll see" is not a strategy: `cron.job_run_details` at 7 days, `audit_events`
+at 24 months, coordinates at 90 days. **`punches`, `workdays` and `adjustments`
+are never pruned** — they are the labor record.
 
-**Lo que no tiene sustituto:** el bloqueo de contraseñas filtradas
-(HaveIBeenPwned) es exclusivo de Pro. Se compensa con mínimo 12 caracteres,
-registro cerrado y MFA para RH — pero no es equivalente, y conviene saberlo.
-
----
-
-## Verificación
-
-La base pasa **23 comprobaciones** automatizadas
-(`supabase/tests/sql/punch_engine_test.sql`), incluidas las que realmente
-importan:
-
-- La hora oficial es la del servidor, aunque el cliente mande una fecha de 2001.
-- Un `UPDATE` o `DELETE` sobre un marcaje falla, incluso desde el rol de
-  servicio.
-- Repetir la misma clave de idempotencia no duplica ni falla.
-- Un lote offline enviado al revés se acepta completo — sólo posible si
-  reordena — y el evento corrupto se rechaza aparte.
-- Un reloj adelantado 10 minutos entra marcado para revisión, no en silencio.
-- Sin consentimiento registrado, las coordenadas se descartan.
-- Empleado, jefe, RH, admin y cuenta sin rol ven exactamente lo que les toca.
-
-Es seguro correrlo contra la base real: todo ocurre en una transacción que
-termina en `ROLLBACK`.
-
-### Lo que aún no está verificado
-
-Las pruebas simulan el token dentro de la base. **Falta la prueba de extremo a
-extremo con `curl`**: con la sesión de un empleado real y la llave publishable,
-intentar un `INSERT` directo a `attendance.punches` por la API REST y llamar
-`punch()` con una hora falsa. Ambos deben fallar. Hasta hacerla, la promesa de
-la regla 2 está verificada por construcción pero no por experimento.
+**What has no substitute:** leaked-password blocking (HaveIBeenPwned) is Pro
+only. It is compensated with a 12-character minimum, closed signup and MFA for
+HR — but it is not equivalent, and that is worth knowing.
 
 ---
 
-## Estado y qué sigue
+## Verification
+
+The database passes **23 automated checks**
+(`supabase/tests/sql/punch_engine_test.sql`), including the ones that actually
+matter:
+
+- The official time is the server's, even when the client sends a date in 2001.
+- An `UPDATE` or `DELETE` on a punch fails, even from the service role.
+- Replaying the same idempotency key neither duplicates nor errors.
+- An offline batch sent in reverse order is accepted in full — only possible if
+  it reorders — and the malformed event is rejected on its own.
+- A clock running 10 minutes fast lands flagged for review, not silently.
+- Without recorded consent, coordinates are discarded.
+- Employee, manager, HR, admin and a role-less account each see exactly what
+  they should.
+
+It is safe to run against the live database: everything happens inside a
+transaction that ends in `ROLLBACK`.
+
+### Not verified yet
+
+The tests simulate the token inside the database. **The end-to-end `curl` test
+is still missing**: with a real employee session and the publishable key,
+attempt a direct `INSERT` into `attendance.punches` through the REST API, and
+call `punch()` with a forged timestamp. Both must fail. Until that is done,
+rule 2 is verified by construction but not by experiment.
+
+---
+
+## Status and what is next
 
 | | |
 |---|---|
-| ✅ | Catálogo de departamentos, roles, vínculo con `auth` |
-| ✅ | Endurecimiento de RLS de la mesa de ayuda |
-| ✅ | Esquema `attendance`, RLS y privilegios |
-| ✅ | Motor de marcaje: estados, idempotencia, append-only, offline |
-| ✅ | Mantenimiento y respaldos del plan gratuito |
-| ⬜ | Cuentas de acceso y endurecimiento de Auth |
-| ⬜ | Horarios por departamento y evaluador de alertas |
-| ⬜ | Edge Function de correo (sobre `config_correo`) |
-| ⬜ | PWA: login, marcaje, cola offline, service worker |
-| ⬜ | Tablero de RH y administración |
+| ✅ | Department catalog, roles, link to `auth` |
+| ✅ | RLS hardening of the help desk tables |
+| ✅ | `attendance` schema, RLS and privileges |
+| ✅ | Punch engine: state machine, idempotency, append-only, offline |
+| ✅ | Free plan maintenance and backups |
+| ⬜ | User accounts and Auth hardening |
+| ⬜ | Per-department schedules and the alert evaluator |
+| ⬜ | Email Edge Function (on top of `config_correo`) |
+| ⬜ | PWA: login, punch screen, offline queue, service worker |
+| ⬜ | HR dashboard and administration |
 
-### Deuda conocida
+### Known debt
 
-- **Alias en español en 20 políticas de producción.** Se leen como
-  `(SELECT internal.caller_role() AS rol_actual)`: Postgres congeló el alias de
-  salida al crear la política. La llamada apunta bien y el comportamiento es
-  idéntico. Se limpia cuando haya que tocar esas políticas por otro motivo, no
-  antes.
-- **`config_correo` guarda secretos en texto plano** (`smtp_pass`,
-  `azure_client_secret`, `oauth_refresh_token`). Con RLS sólo los lee `admin`,
-  pero viajan en cualquier respaldo. Mover a Vault.
-- **`empleados.departamento` (texto) es obsoleta.** Existe sólo para no romper
-  `ti-hub`; un disparador la mantiene sincronizada con `department_id`. Se
-  elimina cuando ese código migre.
-- **8 de 31 empleados no tienen departamento.** Los cubre el horario global,
-  que existe justamente por eso.
+- **SQL comments in the 11 migrations are still in Spanish.** They date from an
+  earlier language decision. Converting them is mechanical but also means
+  updating the `COMMENT ON` strings already stored in the database, so it should
+  be one deliberate pass rather than a drive-by edit.
+- **`docs/original-plan.md` is kept in Spanish on purpose.** It is the original
+  planning document, superseded by this README — it still describes the old
+  Spanish schema names. It is preserved as a historical record, not as current
+  guidance.
+- **Spanish aliases inside 20 production policies.** They read as
+  `(SELECT internal.caller_role() AS rol_actual)`: Postgres froze the output
+  alias when the policy was created. The call resolves correctly and behavior is
+  identical. Clean it up next time those policies need touching, not before.
+- **`config_correo` stores secrets in plain text** (`smtp_pass`,
+  `azure_client_secret`, `oauth_refresh_token`). With RLS only `admin` reads
+  them, but they travel in every backup. Move to Vault.
+- **`empleados.departamento` (text) is obsolete.** It exists only so `ti-hub`
+  keeps working; a trigger keeps it in sync with `department_id`. It goes away
+  when that code migrates.
+- **8 of 31 employees have no department.** The global schedule covers them —
+  that is exactly why it exists.

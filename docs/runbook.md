@@ -1,59 +1,59 @@
 # Runbook
 
-Operación del día a día. Lo que hay que hacer, en qué orden, y cómo comprobar
-que salió bien.
+Day-to-day operation. What to do, in what order, and how to check it worked.
 
 ---
 
-## Puesta en marcha (una sola vez)
+## First-time setup (once)
 
-Estos pasos **faltan** y son requisito para que el sistema se use de verdad.
+These steps are **still missing** and are required before the system can be used
+for real.
 
-### 1. Secretos de GitHub Actions
+### 1. GitHub Actions secrets
 
 `Settings → Secrets and variables → Actions`:
 
-| Secreto | De dónde sale |
+| Secret | Where it comes from |
 |---|---|
-| `SUPABASE_DB_URL` | Panel de Supabase → Project Settings → Database → Connection string (modo **Session**) |
-| `BACKUP_PASSPHRASE` | `openssl rand -base64 48`. **Guardarla también fuera de GitHub** |
+| `SUPABASE_DB_URL` | Supabase dashboard → Project Settings → Database → Connection string (**Session** mode) |
+| `BACKUP_PASSPHRASE` | `openssl rand -base64 48`. **Also store it outside GitHub** |
 
-Sin el primero fallan respaldo, latido y CI. Sin el segundo, el respaldo se
-niega a subir nada antes que subirlo sin cifrar.
+Without the first, backup, keepalive and CI all fail. Without the second, the
+backup refuses to upload anything rather than upload it unencrypted.
 
-### 2. Endurecer Auth en el panel
+### 2. Harden Auth in the dashboard
 
-`Authentication → Providers → Email` y `Authentication → Policies`. Lo de
-`supabase/config.toml` describe el entorno local; **no se aplica solo al
-proyecto remoto**.
+`Authentication → Providers → Email` and `Authentication → Policies`. What is in
+`supabase/config.toml` describes the local environment; **it is not applied
+automatically to the remote project**.
 
-- Longitud mínima: **12**.
-- Caracteres requeridos: mayúscula, minúscula, dígito y símbolo.
-- Registro abierto: **desactivado**. Las cuentas las crea RH.
-- Confirmación por correo: desactivada (las altas son internas).
-- MFA para las cuentas `hr` y `admin`.
+- Minimum length: **12**.
+- Required characters: uppercase, lowercase, digit and symbol.
+- Open signup: **disabled**. HR creates the accounts.
+- Email confirmation: disabled (accounts are created internally).
+- MFA for the `hr` and `admin` accounts.
 
-El bloqueo de contraseñas filtradas no se puede activar en el plan gratuito.
-Ver [free-plan.md](free-plan.md).
+Leaked-password blocking cannot be enabled on the Free plan. See
+[free-plan.md](free-plan.md).
 
-### 3. Crear las cuentas de prueba
+### 3. Create the test accounts
 
-Se acordó empezar con **2 o 3**, no con las 31. Por cada una:
+The agreement was to start with **2 or 3**, not all 31. For each one:
 
 ```sql
--- 1. Crear la cuenta desde el panel (Authentication → Users → Add user),
---    con contraseña generada al azar y "Auto Confirm User".
+-- 1. Create the account in the dashboard (Authentication → Users → Add user),
+--    with a random password and "Auto Confirm User" checked.
 
--- 2. Ligarla con la ficha del empleado y darle rol.
+-- 2. Link it to the employee record and assign a role.
 update public.empleados
-   set auth_user_id = '<uuid-de-la-cuenta>'
- where correo = 'persona@plasticospimsa.com';
+   set auth_user_id = '<account-uuid>'
+ where correo = 'person@plasticospimsa.com';
 
 insert into public.user_roles (auth_user_id, role, note)
-values ('<uuid-de-la-cuenta>', 'employee', 'Cuenta de prueba');
+values ('<account-uuid>', 'employee', 'Test account');
 ```
 
-Comprobar que quedó bien:
+Check that it landed correctly:
 
 ```sql
 select e.nombre, e.correo, ur.role
@@ -62,20 +62,20 @@ select e.nombre, e.correo, ur.role
  where e.auth_user_id is not null;
 ```
 
-### 4. Probar la restauración de un respaldo
+### 4. Do a restore drill
 
-Contra un proyecto Supabase distinto, no contra producción. Un respaldo que
-nunca se restauró es una hipótesis.
+Against a different Supabase project, not production. A backup that has never
+been restored is a hypothesis.
 
 ---
 
-## Revisión semanal (5 minutos)
+## Weekly check (5 minutes)
 
 ```sql
--- 1. Consumo contra las cuotas del plan gratuito.
+-- 1. Consumption against the Free plan quotas.
 select * from attendance.free_plan_usage;
 
--- 2. Los trabajos programados siguen vivos y sin fallar.
+-- 2. Scheduled jobs are alive and not failing.
 select jobname, schedule, active from cron.job order by jobname;
 
 select j.jobname, d.status, d.start_time, d.return_message
@@ -85,121 +85,122 @@ select j.jobname, d.status, d.start_time, d.return_message
  order by d.start_time desc
  limit 20;
 
--- 3. Marcajes que esperan revisión de RH.
+-- 3. Punches waiting on HR review.
 select count(*) from attendance.punches where needs_review;
 ```
 
-Y en GitHub, `Actions`: que **Respaldo diario** y **Latido** estén en verde. Un
-latido rojo varios días seguidos significa que el proyecto puede pausarse.
+And in GitHub, under `Actions`: **Respaldo diario** and **Latido** should be
+green. A red heartbeat several days running means the project may get paused.
 
 ---
 
-## Después de cada migración
+## After every migration
 
-Obligatorio, sin excepción:
+Mandatory, no exceptions:
 
 ```
 get_advisors(project_id, type: "security")
 get_advisors(project_id, type: "performance")
 ```
 
-Hallazgos que **son el diseño** y no se corrigen:
+Findings that **are the design** and are not to be "fixed":
 
-- `punch`, `sync_punches` y `heartbeat` marcadas como *SECURITY DEFINER
-  ejecutable por authenticated*. Son el único camino de escritura; tienen que
-  elevar privilegios.
-- *Leaked password protection disabled*: exclusivo del plan Pro.
-- `unused_index` sobre tablas nuevas: aún no reciben consultas.
+- `punch`, `sync_punches` and `heartbeat` flagged as *SECURITY DEFINER
+  executable by authenticated*. They are the only write path; they have to
+  elevate privileges.
+- *Leaked password protection disabled*: Pro only.
+- `unused_index` on new tables: they simply have not been queried yet.
 
-Y una comprobación que el linter **no** hace, porque sólo verifica que RLS esté
-encendido, no que las políticas sean restrictivas:
+And one check the linter does **not** do, because it only verifies that RLS is
+switched on, not that the policies are restrictive:
 
 ```sql
 select tablename, policyname from pg_policies
  where schemaname = 'public' and permissive = 'PERMISSIVE'
    and (qual = 'true' or qual is null)
    and policyname <> 'departments_read';
--- Esperado: 0 filas. departments_read es libre a propósito.
+-- Expected: 0 rows. departments_read is open on purpose.
 ```
 
 ---
 
-## Correr las pruebas
+## Running the tests
 
 ```bash
 psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 \
      -f supabase/tests/sql/punch_engine_test.sql
 ```
 
-Es seguro contra la base real: todo ocurre dentro de una transacción que
-termina en `ROLLBACK`, y el bloque restaura el estado por su cuenta antes de
-terminar. No deja marcajes, ni jornadas, ni vínculos de cuenta.
+Safe against the live database: everything happens inside a transaction that
+ends in `ROLLBACK`, and the block also restores state on its own before
+finishing. It leaves no punches, no workdays and no account links behind.
 
 ---
 
-## Incidentes
+## Incidents
 
-### El proyecto se pausó
+### The project got paused
 
-Panel de Supabase → seleccionar el proyecto → **Resume project**. Hay 90 días
-desde la pausa para hacerlo con todos los datos intactos. Después, revisar por
-qué falló el latido.
+Supabase dashboard → select the project → **Resume project**. There is a 90-day
+window from the pause to do this with all data intact. Afterwards, find out why
+the heartbeat failed.
 
-### Un empleado no puede marcar
+### An employee cannot punch
 
-Por orden de probabilidad:
+In order of likelihood:
 
 ```sql
--- 1. ¿La cuenta está ligada a una ficha de empleado activa?
+-- 1. Is the account linked to an active employee record?
 select e.nombre, e.estado, ur.role
   from public.empleados e
   left join public.user_roles ur on ur.auth_user_id = e.auth_user_id
  where e.auth_user_id = '<uuid>';
--- Sin fila, o estado <> 'activo': ahí está. punch() lo rechaza a propósito.
+-- No row, or estado <> 'activo': that is it. punch() rejects them on purpose.
 
--- 2. ¿Su equipo está revocado?
+-- 2. Is their device revoked?
 select device_id, revoked_at from attendance.devices
- where employee_id = '<uuid-empleado>' and revoked_at is not null;
+ where employee_id = '<employee-uuid>' and revoked_at is not null;
 
--- 3. ¿En qué estado quedó su jornada?
+-- 3. What state did their workday end up in?
 select work_date, state, opened_at, closed_at
   from attendance.workdays
- where employee_id = '<uuid-empleado>'
+ where employee_id = '<employee-uuid>'
  order by work_date desc limit 5;
 ```
 
-El mensaje de error que ve el empleado ya dice el estado actual — por eso están
-redactados en español.
+The error the employee sees already names the current state — that is why those
+messages are written in Spanish.
 
-### Hay que corregir un marcaje
+### A punch needs correcting
 
-**No se edita.** `attendance.punches` es append-only y el disparador rechaza
-cualquier `UPDATE`, incluso desde el rol de servicio. La corrección es una fila
-nueva en `attendance.adjustments`, con motivo obligatorio de al menos 10
-caracteres. Es lo que hace defendible el registro: nada se cambia en silencio.
+**It does not get edited.** `attendance.punches` is append-only and the trigger
+rejects any `UPDATE`, even from the service role. The correction is a new row in
+`attendance.adjustments`, with a mandatory reason of at least 10 characters.
+That is what makes the record defensible: nothing changes silently.
 
-### Revocar el equipo de alguien que perdió su laptop
+### Revoking the device of someone who lost their laptop
 
 ```sql
 update attendance.devices
    set revoked_at = now(), revoked_by = auth.uid()
- where employee_id = '<uuid-empleado>' and device_id = '<id-del-equipo>';
+ where employee_id = '<employee-uuid>' and device_id = '<device-id>';
 ```
 
-Bloquea ese equipo sin cerrar la cuenta. Desde ese momento `punch()` lo rechaza.
+Blocks that device without closing the account. From then on `punch()` rejects
+it.
 
 ---
 
-## Aplicar una migración
+## Applying a migration
 
-No hay CLI configurado (sin `config.toml` enlazado ni contraseña de base), así
-que las migraciones se aplican por MCP de Supabase.
+There is no CLI set up (no linked `config.toml`, no database password), so
+migrations are applied through the Supabase MCP.
 
-1. Escribir el SQL en `supabase/migrations/_pendiente_<nombre>.sql`.
-2. Aplicar con `apply_migration` (nombre en `snake_case`, sin marca de tiempo).
-3. Leer con `list_migrations` la versión que asignó.
-4. **Renombrar el archivo a `<versión>_<nombre>.sql`.**
+1. Write the SQL in `supabase/migrations/_pendiente_<name>.sql`.
+2. Apply it with `apply_migration` (name in `snake_case`, no timestamp).
+3. Read the assigned version with `list_migrations`.
+4. **Rename the file to `<version>_<name>.sql`.**
 
-El paso 4 no es cosmético: `apply_migration` asigna la versión por la hora de
-ejecución, ignorando el nombre del archivo. Si no se renombra, repositorio y
-base quedan derivados en silencio. Ya pasó una vez.
+Step 4 is not cosmetic: `apply_migration` assigns the version from the execution
+time, ignoring the filename. Skip it and the repository and the database drift
+apart silently. It has already happened once.

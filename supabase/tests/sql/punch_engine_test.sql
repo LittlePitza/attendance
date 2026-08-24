@@ -1,20 +1,24 @@
 -- punch_engine_test.sql
 --
--- Verificacion del motor de marcaje: maquina de estados, sello de tiempo,
--- idempotencia, append-only, privacidad e ingesta offline.
+-- Verification of the punch engine: state machine, timestamping, idempotency,
+-- append-only enforcement, privacy and offline ingestion.
 --
--- Como correrlo:
+-- How to run it:
 --
 --   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/sql/punch_engine_test.sql
 --
--- Se puede correr contra la base real sin miedo: TODO ocurre dentro de una
--- transaccion que termina en ROLLBACK. No queda ni un marcaje, ni una jornada,
--- ni un vinculo de cuenta. Deliberadamente no usa pgTAP: instalarlo publicaria
--- cientos de funciones de prueba como endpoints REST en public, y sin Docker no
--- hay entorno local donde aislarlo.
+-- Safe to run against the live database: EVERYTHING happens inside a
+-- transaction that ends in ROLLBACK. No punch, no workday and no account link
+-- survives it. Deliberately not pgTAP: installing it would publish hundreds of
+-- test functions as REST endpoints in `public`, and without Docker there is no
+-- local environment to isolate it in.
 --
--- Falla ruidosamente: si una sola comprobacion no pasa, lanza una excepcion y
--- psql sale con codigo distinto de cero, que es lo que necesita el CI.
+-- Fails loudly: if a single check does not pass it raises an exception and psql
+-- exits non-zero, which is what CI needs.
+--
+-- Note on language: assertion names are in English, but a few literals stay in
+-- Spanish on purpose -- they match the error messages the database raises for
+-- employees, which are written in Spanish by design.
 
 \set ON_ERROR_STOP on
 
@@ -43,110 +47,109 @@ begin
    order by nombre limit 1;
 
   if v_uid is null or v_emp2 is null then
-    raise exception 'Faltan datos base: se necesita al menos 1 cuenta y 2 empleados activos';
+    raise exception 'Missing baseline data: need at least 1 account and 2 active employees';
   end if;
 
-  -- Se guarda el rol original para devolverlo al final. El ROLLBACK del archivo
-  -- ya lo desharia todo, pero esto hace que la prueba tambien sea correcta si
-  -- alguien ejecuta el bloque suelto desde el editor SQL del panel, donde no
-  -- hay rollback. Dejar la cuenta administradora convertida en 'hr' seria
-  -- dejarla sin acceso.
+  -- The original role is captured so it can be handed back at the end. The
+  -- file's ROLLBACK would undo it anyway, but this keeps the test correct if
+  -- someone runs the block on its own from the dashboard SQL editor, where
+  -- there is no rollback. Leaving the admin account as 'hr' would lock it out.
   select role into v_original_role from public.user_roles where auth_user_id = v_uid;
 
-  -- ======================================================== FASE A: en linea ===
+  -- ========================================================= PHASE A: online ===
   update public.empleados set auth_user_id = v_uid where id = v_emp1;
   perform set_config('request.jwt.claims', json_build_object('sub', v_uid)::text, true);
 
-  -- La entrada abre la jornada.
+  -- Clocking in opens the workday.
   v_r := public.punch('clock_in', v_k1, v_client_time, null, null, 19.43, -99.13, 12.5);
   insert into test_results(name, expected, got, passed) values
-    ('clock_in abre la jornada', 'working', v_r->>'state', v_r->>'state' = 'working');
+    ('clock_in opens the workday', 'working', v_r->>'state', v_r->>'state' = 'working');
 
-  -- La hora oficial la pone el servidor, no el cliente.
+  -- The official timestamp comes from the server, not the client.
   v_occurred := (v_r->>'occurred_at')::timestamptz;
   insert into test_results(name, expected, got, passed) values
-    ('occurred_at es la hora del servidor', '< 60s de now()',
+    ('occurred_at is the server time', '< 60s from now()',
      round(abs(extract(epoch from (now() - v_occurred))))::text || 's',
      abs(extract(epoch from (now() - v_occurred))) < 60);
 
-  -- La del cliente se guarda aparte, solo para auditar.
+  -- The client's time is stored separately, for auditing only.
   select client_reported_at into v_occurred
     from attendance.punches where idempotency_key = v_k1;
   insert into test_results(name, expected, got, passed) values
-    ('la hora del cliente se guarda aparte', v_client_time::text, v_occurred::text,
+    ('client time stored separately', v_client_time::text, v_occurred::text,
      v_occurred = v_client_time);
 
-  -- Sin consentimiento registrado, las coordenadas se descartan.
+  -- Without recorded consent, coordinates are discarded.
   insert into test_results(name, expected, got, passed) values
-    ('geo descartada sin consentimiento', 'false', v_r->>'geo_saved',
+    ('geo discarded without consent', 'false', v_r->>'geo_saved',
      (v_r->>'geo_saved') = 'false');
 
-  -- Transiciones invalidas.
+  -- Invalid transitions.
   begin
     v_r := public.punch('clock_in', gen_random_uuid());
     insert into test_results(name, expected, got, passed) values
-      ('segunda entrada rechazada', 'error', 'la acepto', false);
+      ('second clock_in rejected', 'error', 'it was accepted', false);
   exception when others then
     insert into test_results(name, expected, got, passed) values
-      ('segunda entrada rechazada', 'error', left(sqlerrm, 45), true);
+      ('second clock_in rejected', 'error', left(sqlerrm, 45), true);
   end;
 
   v_r := public.punch('break_start', gen_random_uuid());
   insert into test_results(name, expected, got, passed) values
-    ('break_start pausa la jornada', 'on_break', v_r->>'state', v_r->>'state' = 'on_break');
+    ('break_start pauses the workday', 'on_break', v_r->>'state', v_r->>'state' = 'on_break');
 
   begin
     v_r := public.punch('break_start', gen_random_uuid());
     insert into test_results(name, expected, got, passed) values
-      ('doble break_start rechazado', 'error', 'lo acepto', false);
+      ('double break_start rejected', 'error', 'it was accepted', false);
   exception when others then
     insert into test_results(name, expected, got, passed) values
-      ('doble break_start rechazado', 'error', left(sqlerrm, 45), true);
+      ('double break_start rejected', 'error', left(sqlerrm, 45), true);
   end;
 
   v_r := public.punch('break_end', gen_random_uuid());
   insert into test_results(name, expected, got, passed) values
-    ('break_end reanuda', 'working', v_r->>'state', v_r->>'state' = 'working');
+    ('break_end resumes work', 'working', v_r->>'state', v_r->>'state' = 'working');
 
   v_r := public.punch('clock_out', gen_random_uuid());
   insert into test_results(name, expected, got, passed) values
-    ('clock_out cierra la jornada', 'finished', v_r->>'state', v_r->>'state' = 'finished');
+    ('clock_out closes the workday', 'finished', v_r->>'state', v_r->>'state' = 'finished');
 
-  -- Idempotencia: repetir la misma clave no duplica ni falla.
+  -- Idempotency: replaying the same key neither duplicates nor errors.
   v_r := public.punch('clock_in', v_k1);
   select count(*) into v_count from attendance.punches where idempotency_key = v_k1;
   insert into test_results(name, expected, got, passed) values
-    ('idempotencia no duplica', 'repeated=true y 1 fila',
-     'repeated=' || (v_r->>'repeated') || ' y ' || v_count || ' fila(s)',
+    ('idempotency does not duplicate', 'repeated=true and 1 row',
+     'repeated=' || (v_r->>'repeated') || ' and ' || v_count || ' row(s)',
      (v_r->>'repeated') = 'true' and v_count = 1);
 
-  -- Append-only: ni el rol de servicio puede modificar un marcaje.
+  -- Append-only: not even the service role can alter a punch.
   select id into v_punch_id from attendance.punches where idempotency_key = v_k1;
   begin
     update attendance.punches set occurred_at = now() where id = v_punch_id;
     insert into test_results(name, expected, got, passed) values
-      ('UPDATE sobre punches bloqueado', 'error', 'lo permitio', false);
+      ('UPDATE on punches blocked', 'error', 'it was allowed', false);
   exception when others then
     insert into test_results(name, expected, got, passed) values
-      ('UPDATE sobre punches bloqueado', 'error', left(sqlerrm, 45), true);
+      ('UPDATE on punches blocked', 'error', left(sqlerrm, 45), true);
   end;
 
   begin
     delete from attendance.punches where id = v_punch_id;
     insert into test_results(name, expected, got, passed) values
-      ('DELETE sobre punches bloqueado', 'error', 'lo permitio', false);
+      ('DELETE on punches blocked', 'error', 'it was allowed', false);
   exception when others then
     insert into test_results(name, expected, got, passed) values
-      ('DELETE sobre punches bloqueado', 'error', left(sqlerrm, 45), true);
+      ('DELETE on punches blocked', 'error', left(sqlerrm, 45), true);
   end;
 
-  -- ========================================================= FASE B: offline ===
+  -- ======================================================== PHASE B: offline ===
   update public.empleados set auth_user_id = null   where id = v_emp1;
   update public.empleados set auth_user_id = v_uid  where id = v_emp2;
 
-  -- Lote deliberadamente desordenado, con un reloj adelantado y una fecha rota.
-  -- Si la funcion no reordenara por hora, la maquina de estados rechazaria
-  -- casi todo: que pasen los cuatro es la prueba de que reordena.
+  -- A deliberately shuffled batch, with a fast clock and one broken date. If
+  -- the function did not reorder by time, the state machine would reject almost
+  -- all of it: all four being accepted IS the proof that it reorders.
   v_r := public.sync_punches(jsonb_build_array(
     jsonb_build_object('kind','break_end',   'occurred_at',(now() - interval '20 min')::text,
                        'idempotency_key', gen_random_uuid()),
@@ -156,84 +159,86 @@ begin
                        'idempotency_key', gen_random_uuid()),
     jsonb_build_object('kind','break_start', 'occurred_at',(now() - interval '30 min')::text,
                        'idempotency_key', gen_random_uuid()),
-    jsonb_build_object('kind','clock_in',    'occurred_at','no-es-una-fecha',
+    jsonb_build_object('kind','clock_in',    'occurred_at','not-a-date',
                        'idempotency_key', gen_random_uuid())
   ));
 
   insert into test_results(name, expected, got, passed) values
-    ('lote desordenado se ordena solo', '4 aceptados, 1 rechazado',
-     (v_r->>'accepted') || ' aceptados, ' || (v_r->>'rejected') || ' rechazado',
+    ('shuffled batch sorts itself', '4 accepted, 1 rejected',
+     (v_r->>'accepted') || ' accepted, ' || (v_r->>'rejected') || ' rejected',
      (v_r->>'accepted') = '4' and (v_r->>'rejected') = '1');
 
   select state into v_text from attendance.workdays where employee_id = v_emp2;
   insert into test_results(name, expected, got, passed) values
-    ('estado final tras el lote', 'finished', v_text, v_text = 'finished');
+    ('final state after the batch', 'finished', v_text, v_text = 'finished');
 
   select count(*) into v_count from attendance.punches
    where employee_id = v_emp2 and source = 'offline';
   insert into test_results(name, expected, got, passed) values
-    ('los cuatro quedan marcados como offline', '4', v_count::text, v_count = 4);
+    ('all four labelled as offline', '4', v_count::text, v_count = 4);
 
-  -- Un reloj desviado mas de 2 minutos no se acepta en silencio.
+  -- A clock more than 2 minutes off is not accepted silently.
+  -- 'Reloj' is Spanish on purpose: it matches the review_reason the engine
+  -- writes, and those messages are written for the people who read them.
   select count(*) into v_count from attendance.punches
    where employee_id = v_emp2 and needs_review and review_reason like '%Reloj%';
   insert into test_results(name, expected, got, passed) values
-    ('reloj alterado marcado para revision', '1', v_count::text, v_count = 1);
+    ('tampered clock flagged for review', '1', v_count::text, v_count = 1);
 
   select needs_review::text into v_text from attendance.workdays where employee_id = v_emp2;
   insert into test_results(name, expected, got, passed) values
-    ('la jornada hereda needs_review', 'true', v_text, v_text = 'true');
+    ('workday inherits needs_review', 'true', v_text, v_text = 'true');
 
-  -- El latido no revive una jornada ya cerrada.
+  -- The heartbeat does not revive a closed workday.
   v_r := public.heartbeat();
   insert into test_results(name, expected, got, passed) values
-    ('heartbeat no revive jornada cerrada', 'recorded=false',
+    ('heartbeat does not revive a closed workday', 'recorded=false',
      'recorded=' || (v_r->>'recorded'), (v_r->>'recorded') = 'false');
 
-  -- ============================================================ alcance RLS ===
+  -- =========================================================== RLS scoping ===
   update public.empleados set auth_user_id = null  where id = v_emp2;
   update public.empleados set auth_user_id = v_uid where id = v_emp1;
 
   update public.user_roles set role = 'employee' where auth_user_id = v_uid;
   insert into test_results(name, expected, got, passed) values
-    ('employee se ve a si mismo', 'true',
+    ('employee sees themselves', 'true',
      internal.can_view_employee(v_emp1)::text, internal.can_view_employee(v_emp1) is true);
   insert into test_results(name, expected, got, passed) values
-    ('employee NO ve a otro', 'false',
+    ('employee does NOT see another', 'false',
      internal.can_view_employee(v_emp2)::text, internal.can_view_employee(v_emp2) is false);
 
   update public.user_roles set role = 'hr' where auth_user_id = v_uid;
   insert into test_results(name, expected, got, passed) values
-    ('hr ve a cualquiera', 'true',
+    ('hr sees anyone', 'true',
      internal.can_view_employee(v_emp2)::text, internal.can_view_employee(v_emp2) is true);
 
   perform set_config('request.jwt.claims',
                      json_build_object('sub', gen_random_uuid())::text, true);
   insert into test_results(name, expected, got, passed) values
-    ('cuenta sin rol cae en guest', 'guest',
+    ('account with no role falls back to guest', 'guest',
      internal.caller_role(), internal.caller_role() = 'guest');
   insert into test_results(name, expected, got, passed) values
-    ('guest no ve a nadie', 'false',
+    ('guest sees nobody', 'false',
      internal.can_view_employee(v_emp1)::text, internal.can_view_employee(v_emp1) is false);
 
-  -- ========================================================== restauracion ===
+  -- ============================================================== restore ===
   update public.user_roles set role = v_original_role where auth_user_id = v_uid;
   update public.empleados  set auth_user_id = null    where id in (v_emp1, v_emp2);
 end
 $test$;
 
--- Informe legible.
+-- Readable report.
 \echo ''
-\echo '=== Verificacion del motor de marcaje ==='
+\echo '=== Punch engine verification ==='
 select n,
-       name       as prueba,
-       expected   as esperado,
-       got        as obtenido,
-       case when passed then 'PASA' else '*** FALLA ***' end as veredicto
+       name     as check_name,
+       expected,
+       got,
+       case when passed then 'PASS' else '*** FAIL ***' end as verdict
   from test_results
  order by n;
 
--- Si algo fallo, revienta con codigo distinto de cero para que el CI lo note.
+-- If anything failed, blow up with a non-zero exit code so CI notices.
 do $verdict$
 declare
   v_failed int;
@@ -243,13 +248,13 @@ begin
     from test_results;
 
   if v_failed > 0 then
-    raise exception '% de % comprobaciones fallaron', v_failed, v_total;
+    raise exception '% of % checks failed', v_failed, v_total;
   end if;
 
-  raise notice 'Las % comprobaciones pasaron.', v_total;
+  raise notice 'All % checks passed.', v_total;
 end
 $verdict$;
 
--- Nada de esto se queda. Ni los marcajes, ni las jornadas, ni el vinculo de
--- cuenta que se uso para simular el token, ni el cambio temporal de rol.
+-- None of this sticks: not the punches, not the workdays, not the account link
+-- used to simulate the token, not the temporary role change.
 rollback;

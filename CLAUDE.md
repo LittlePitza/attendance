@@ -1,158 +1,176 @@
-# Checador — guía para trabajar en este proyecto
+# Checador — working guide for this project
 
-Sistema de registro de asistencia para personal en home office de Plásticos PIMSA.
-Todo corre en Supabase: no hay servidor de aplicación.
+Attendance tracking for Plásticos PIMSA's remote staff. Everything runs on
+Supabase: there is no application server.
 
-## Dónde vive
+## Where it lives
 
-Proyecto Supabase **`pimsa_ti`** (`cyjpucvvekzfpvvonuld`, Postgres 17, us-east-1).
-**No es un proyecto vacío**: comparte la base con la mesa de ayuda de TI, que está
-en producción (tickets, inventario, responsivas, compras, caja). Cualquier cambio
-en `public` puede romperla.
+Supabase project **`pimsa_ti`** (`cyjpucvvekzfpvvonuld`, Postgres 17, us-east-1).
+**This is not an empty project**: it shares the database with the IT help desk,
+which is in production (tickets, inventory, handover forms, purchasing, petty
+cash). Any change to `public` can break it.
 
-- Tablas del checador → esquema **`attendance`**
-- Catálogos compartidos (`empleados`, `departments`) → esquema `public`
-- Funciones de identidad y disparadores → esquema **`internal`**
+- Time clock tables → schema **`attendance`**
+- Shared catalogs (`empleados`, `departments`) → schema `public`
+- Identity functions and triggers → schema **`internal`**
 
-## Idioma
+## Language
 
-**El código y la estructura van en inglés. Los comentarios y la documentación,
-en español.**
+**Code, structure and documentation in English. User-facing text in Spanish.**
 
-- Nombres de esquemas, tablas, columnas, funciones, índices, restricciones,
-  políticas, archivos y carpetas: **inglés**.
-- Valores tipo enum de los `CHECK` (`'clock_in'`, `'working'`, `'hr'`): **inglés**.
-- Comentarios del SQL, `COMMENT ON` y `docs/`: **español**.
-- **Mensajes de error que llegan a la pantalla del empleado: español.** Los lee
-  gente que no habla inglés.
+- Schema, table, column, function, index, constraint, policy, file and folder
+  names: **English**.
+- Enum-style `CHECK` values (`'clock_in'`, `'working'`, `'hr'`): **English**.
+- `README.md`, `docs/`, ADRs, commit messages: **English**.
+- **Error messages that reach the employee's screen: Spanish.** They are read by
+  people who do not speak English.
 
-La excepción, y es deliberada: **las 19 tablas de la mesa de ayuda siguen en
-español** (`empleados`, `tickets`, `equipos`, `config_correo`, `responsivas`,
-`facturas`, `caja_movimientos`…). Están en producción y las consume `ti-hub`,
-que vive en otro repositorio. Renombrarlas rompe ese sistema.
+Two deliberate exceptions:
 
-Por eso el modelo está mezclado a propósito: `attendance.punches.employee_id`
-apunta a `public.empleados.id`. No es incoherencia, es la frontera con lo que ya
-existía. Se resolverá cuando el código de ti-hub migre.
+- **The 19 help desk tables keep their Spanish names** (`empleados`, `tickets`,
+  `equipos`, `config_correo`, `responsivas`, `facturas`, `caja_movimientos`…).
+  They are in production and consumed by `ti-hub`, which lives in a separate
+  repository. Renaming them breaks that system. That is why the model is mixed
+  on purpose: `attendance.punches.employee_id` points at `public.empleados.id`.
+- **SQL comments inside `supabase/migrations/` are still in Spanish**, left over
+  from an earlier decision. New SQL should be commented in English; converting
+  the existing files is a separate, deliberate pass because it also means
+  updating the `COMMENT ON` strings stored in the database.
 
-## Reglas que no se rompen
+## Rules that are never broken
 
-1. **Postgres decide, no el cliente.** Las reglas de negocio viven en funciones
-   `SECURITY DEFINER`. Las Edge Functions solo hablan con el mundo exterior
-   (correo, altas de usuario, exportar) y **nunca** contienen reglas de negocio.
-   La PWA no tiene lógica: llama funciones y pinta datos.
+1. **Postgres decides, not the client.** Business rules live in
+   `SECURITY DEFINER` functions. Edge Functions only talk to the outside world
+   (email, user provisioning, exports) and **never** hold business rules. The
+   PWA has no logic: it calls functions and renders data.
 
-2. **El cliente no escribe tablas.** A `authenticated` se le da `SELECT`
-   (filtrado por RLS) y nunca `INSERT`/`UPDATE`/`DELETE` sobre las tablas del
-   checador. El único camino de escritura son las funciones.
+2. **The client does not write tables.** `authenticated` gets `SELECT` (filtered
+   by RLS) and never `INSERT`/`UPDATE`/`DELETE` on the time clock tables.
+   Functions are the only write path.
 
-3. **La hora la pone el servidor.** `occurred_at := now()`. Cualquier hora que
-   mande el cliente se guarda aparte, en `client_reported_at`, solo para auditar.
+3. **The server sets the time.** `occurred_at := now()`. Whatever time the
+   client sends is stored separately, in `client_reported_at`, for auditing only.
 
-4. **El `employee_id` se deriva del token**, con `internal.caller_employee_id()`.
-   Jamás se acepta como parámetro: así nadie marca en nombre de otro.
+4. **`employee_id` is derived from the token**, via
+   `internal.caller_employee_id()`. Never accepted as a parameter: that is what
+   stops anyone punching on someone else's behalf.
 
-5. **`attendance.punches` es append-only.** Lo hace cumplir un disparador, no
-   solo la falta de privilegios: el rol de servicio los tiene de todos modos.
-   Las correcciones son filas nuevas en `attendance.adjustments`, con motivo
-   obligatorio de al menos 10 caracteres.
+5. **`attendance.punches` is append-only.** Enforced by a trigger, not just by
+   withheld privileges — the service role has them anyway. Corrections are new
+   rows in `attendance.adjustments`, with a mandatory reason of at least 10
+   characters.
 
-6. **Toda función lleva `SET search_path = ''`** y nombres calificados por
-   completo. Sin eso, un `search_path` manipulado permite secuestrarla.
+6. **Every function carries `SET search_path = ''`** and fully qualified names.
+   Without that, a manipulated `search_path` allows hijacking it.
 
-7. **Nada de funciones sueltas en `public`.** Lo que vive en `public` queda
-   publicado como endpoint REST. Las funciones internas van en `internal`, que
-   **no debe agregarse a "Exposed schemas"**. La única RPC de identidad
-   publicada es `public.my_profile()`.
+7. **No loose functions in `public`.** Anything in `public` is published as a
+   REST endpoint. Internal functions go in `internal`, which **must not be added
+   to "Exposed schemas"**.
 
-   Lo que **sí** vive en `public` a propósito, porque el cliente tiene que
-   poder llamarlo por REST: `my_profile()`, `server_time()`, `punch()`,
-   `sync_punches()` y `heartbeat()`. Los advisors marcan las tres últimas como
-   «SECURITY DEFINER ejecutable por authenticated»: **es el diseño**, no un
-   hallazgo. Son el único camino de escritura y por eso deben elevar privilegios.
+   What **does** live in `public` on purpose, because the client has to call it
+   over REST: `my_profile()`, `server_time()`, `punch()`, `sync_punches()` and
+   `heartbeat()`. The advisors flag the last three as "SECURITY DEFINER
+   executable by authenticated": **that is the design**, not a finding. They are
+   the only write path, so they must elevate privileges.
 
-8. **En las políticas RLS, envolver las llamadas en `(select ...)`**:
-   `using ((select internal.caller_role()) = 'admin')`. Así Postgres las evalúa una
-   vez por sentencia y no una vez por fila.
+8. **Wrap calls in `(select ...)` inside RLS policies**:
+   `using ((select internal.caller_role()) = 'admin')`. That way Postgres
+   evaluates them once per statement instead of once per row.
 
-## Convenciones de código
+## Code conventions
 
-Se siguen las que ya usaba `pimsa_ti`, para que todo se lea igual:
+Following what `pimsa_ti` already used, so everything reads alike:
 
-- `snake_case` en inglés (ver **Idioma** arriba).
+- `snake_case`, in English (see **Language** above).
 - `id uuid primary key default gen_random_uuid()`.
-- `num integer` con secuencia cuando hace falta un folio legible.
-- **`text` con `CHECK`** en lugar de tipos `enum`.
+- `num integer` with a sequence when a human-readable folio is needed.
+- **`text` with a `CHECK`** instead of `enum` types.
 - `created_at timestamptz not null default now()`.
-- `jsonb` con default `'{}'` o `'[]'` para datos flexibles.
-- RLS activo en **todas** las tablas.
-- Bitácora al estilo de `ticket_eventos`, en `attendance.audit_events`
+- `jsonb` defaulting to `'{}'` or `'[]'` for flexible data.
+- RLS enabled on **every** table.
+- Audit log in the style of `ticket_eventos`, as `attendance.audit_events`
   (`kind`, `actor`, `before_data`, `after_data`).
 
 ## Roles
 
-En `public.user_roles`, uno por **cuenta** (no por persona: existe una cuenta
-administradora que no es empleado).
+In `public.user_roles`, one per **account** (not per person: there is an
+administrator account that is not an employee).
 
-| Rol | Alcance |
+| Role | Scope |
 |---|---|
-| `employee` | Solo sus propios registros |
-| `manager` | Su departamento |
-| `hr` | Todos, más ajustes y alertas |
-| `admin` | Todo, más configuración |
-| `guest` | Valor por defecto si no tiene rol: **sin permisos** |
+| `employee` | Only their own records |
+| `manager` | Their department |
+| `hr` | Everyone, plus adjustments and alerts |
+| `admin` | Everything, plus configuration |
+| `guest` | Default when no role is assigned: **no access** |
 
-## Comandos
+`internal.can_view_employee()` is the single place that decides who sees whose
+data. Keep it that way.
 
-No hay Docker instalado, y no hace falta:
+## Commands
+
+No Docker is installed, and none is needed:
 
 ```bash
-npx supabase db push                      # aplicar migraciones (remoto)
-npx supabase functions deploy --use-api   # desplegar funciones sin Docker
+npx supabase db push                      # apply migrations (remote)
+npx supabase functions deploy --use-api   # deploy functions without Docker
 npx supabase gen types typescript --linked > web/src/shared/supabase/types.gen.ts
-npx supabase test db                       # pruebas pgTAP
+
+psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 \
+     -f supabase/tests/sql/punch_engine_test.sql
 ```
 
-Docker solo se necesita para `supabase start` y `functions serve`, que emulan
-todo localmente. Es opcional.
+Docker is only needed for `supabase start` and `functions serve`, which emulate
+everything locally. Optional.
 
-## Al terminar cualquier migración
+## Applying a migration
 
-Correr siempre los advisors y dejar el resultado en cero hallazgos nuevos:
+`apply_migration` (Supabase MCP) assigns the version from the execution time and
+ignores the filename. So:
+
+1. Write the SQL in `supabase/migrations/_pendiente_<name>.sql`.
+2. Apply it with `apply_migration`.
+3. Read the assigned version with `list_migrations`.
+4. **Rename the file to `<version>_<name>.sql`.**
+
+Skip step 4 and the repository and the database drift apart silently.
+
+## After every migration
+
+Always run the advisors and leave them with no new findings:
 
 ```
 get_advisors(project_id, type: "security")
 get_advisors(project_id, type: "performance")
 ```
 
-Ojo: el linter verifica que RLS esté **encendido**, no que las políticas sean
-**restrictivas**. Una política `using (true)` pasa el linter y deja la tabla
-abierta. Verificar a mano:
+Note: the linter checks that RLS is **on**, not that policies are
+**restrictive**. A `using (true)` policy passes the linter and leaves the table
+wide open. Check by hand:
 
 ```sql
 select tablename, policyname from pg_policies
- where schemaname = 'public' and cmd = 'ALL' and qual = 'true';
--- Esperado: 0 filas.
+ where schemaname = 'public' and permissive = 'PERMISSIVE'
+   and (qual = 'true' or qual is null)
+   and policyname <> 'departments_read';
+-- Expected: 0 rows. departments_read is open on purpose.
 ```
 
-## Pendientes conocidos
+## Known pending items
 
-- **Plan Pro ($25/mes):** el plan gratuito **no hace respaldos automáticos**.
-  Debe decidirse antes de que el sistema entre en uso real. También habilita el
-  bloqueo de contraseñas filtradas, la única advertencia que queda abierta.
-- **`public.config_correo`** guarda `smtp_pass`, `azure_client_secret` y
-  `oauth_refresh_token` en **texto plano**. Mover a Vault.
-- **Columna `empleados.departamento` (texto)** es obsoleta: existe solo para no
-  romper la mesa de ayuda. Un disparador la mantiene sincronizada con
-  `department_id`. Se elimina cuando el código de ti-hub use el id.
-- **8 de 31 empleados no tienen departamento.** Los cubre el horario global.
-- **Alias en español dentro de 20 políticas de producción.** Se leen como
-  `(SELECT internal.caller_role() AS rol_actual)`: Postgres congeló el alias de
-  salida con el nombre que la función tenía al crearse la política. La llamada
-  apunta bien y el comportamiento es idéntico; solo es una etiqueta. Se limpia
-  la próxima vez que haya que tocar esas políticas, no antes: recrear 20
-  políticas de tablas en producción por un alias no se paga.
-- **Las 31 cuentas de acceso no existen todavía.** Se acordó crear 2 o 3 de
-  prueba primero. `public.empleados.auth_user_id` está en cero.
-- **`pg_cron`, `pg_net` y `pgtap` no están instalados**, solo disponibles. Las
-  migraciones de alertas y purga necesitan `create extension` explícito.
+- **Free plan.** No automatic backups and the project pauses after 7 days of low
+  activity. Compensated by `.github/workflows/backup.yml` (encrypted daily dump)
+  and `keepalive.yml`. Leaked-password blocking is Pro only and cannot be
+  enabled. See [docs/free-plan.md](docs/free-plan.md).
+- **`public.config_correo`** stores `smtp_pass`, `azure_client_secret` and
+  `oauth_refresh_token` in **plain text**. Move to Vault.
+- **`empleados.departamento` (text)** is obsolete: it exists only so the help
+  desk keeps working. A trigger keeps it in sync with `department_id`. It goes
+  away when `ti-hub` uses the id.
+- **8 of 31 employees have no department.** The global schedule covers them.
+- **Spanish aliases inside 20 production policies**, reading as
+  `(SELECT internal.caller_role() AS rol_actual)`: Postgres froze the output
+  alias when the policy was created. The call resolves correctly and behavior is
+  identical. Clean it up next time those policies need touching, not before.
+- **The 31 user accounts do not exist yet.** The agreement was to create 2 or 3
+  test accounts first. `public.empleados.auth_user_id` is at zero.

@@ -1,11 +1,12 @@
-# Integracion continua.
+# Continuous integration.
 #
-# Sin Docker en el entorno de desarrollo, las pruebas de SQL corren contra la
-# base real. Es seguro: punch_engine_test.sql envuelve todo en una transaccion
-# que termina en ROLLBACK, y ademas restaura el estado dentro del propio bloque.
+# With no Docker in the development environment, the SQL tests run against the
+# live database. That is safe: punch_engine_test.sql wraps everything in a
+# transaction that ends in ROLLBACK, and it also restores state inside the block
+# itself.
 #
-# Se ejecuta en serie (concurrency) porque dos corridas simultaneas competirian
-# por el mismo vinculo de cuenta al simular el token.
+# Runs serially (concurrency) because two simultaneous runs would compete for
+# the same account link when simulating the token.
 
 name: CI
 
@@ -21,82 +22,82 @@ concurrency:
 
 jobs:
   sql:
-    name: Pruebas de SQL
+    name: SQL tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verificar el motor de marcaje
+      - name: Verify the punch engine
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           set -euo pipefail
           if [ -z "${DB_URL:-}" ]; then
-            echo "::warning::Sin SUPABASE_DB_URL no se pueden correr las pruebas de SQL."
-            echo "::warning::Configurar el secreto en Settings > Secrets and variables > Actions."
+            echo "::warning::Without SUPABASE_DB_URL the SQL tests cannot run."
+            echo "::warning::Set the secret under Settings > Secrets and variables > Actions."
             exit 1
           fi
           psql "$DB_URL" -v ON_ERROR_STOP=1 \
                -f supabase/tests/sql/punch_engine_test.sql
 
   invariants:
-    name: Invariantes de seguridad
+    name: Security invariants
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
 
-      # Estas cuatro comprobaciones son el nucleo de la promesa de seguridad.
-      # Si alguna se rompe, la migracion que la rompio no debe llegar a main.
-      - name: Comprobar
+      # These four checks are the core of the security promise. If any of them
+      # breaks, the migration that broke it must not reach main.
+      - name: Check
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           set -euo pipefail
           if [ -z "${DB_URL:-}" ]; then
-            echo "::warning::Sin SUPABASE_DB_URL." ; exit 1
+            echo "::warning::Missing SUPABASE_DB_URL." ; exit 1
           fi
           psql "$DB_URL" -v ON_ERROR_STOP=1 -c "
           do \$\$
           declare v int;
           begin
-            -- 1. El cliente no escribe ninguna tabla de attendance.
+            -- 1. The client writes no attendance table.
             select count(*) into v from information_schema.role_table_grants
              where table_schema='attendance' and grantee='authenticated'
                and privilege_type <> 'SELECT';
             if v > 0 then
-              raise exception 'authenticated tiene % privilegios de escritura en attendance', v;
+              raise exception 'authenticated holds % write privileges on attendance', v;
             end if;
 
-            -- 2. Las coordenadas no son legibles por el cliente.
+            -- 2. Coordinates are not readable by the client.
             select count(*) into v from information_schema.column_privileges
              where table_schema='attendance' and table_name='punches'
                and grantee='authenticated' and column_name in ('geo_lat','geo_lng');
             if v > 0 then
-              raise exception 'geo_lat/geo_lng quedaron legibles para authenticated';
+              raise exception 'geo_lat/geo_lng are readable by authenticated';
             end if;
 
-            -- 3. RLS encendido en todas las tablas de attendance.
+            -- 3. RLS enabled on every attendance table.
             select count(*) into v from pg_tables
              where schemaname='attendance' and not rowsecurity;
             if v > 0 then
-              raise exception '% tablas de attendance sin RLS', v;
+              raise exception '% attendance tables without RLS', v;
             end if;
 
-            -- 4. Ninguna politica permisiva abierta en public.
-            --    departments_read es intencional: los nombres de departamento
-            --    no son dato sensible y la interfaz los necesita.
+            -- 4. No wide-open permissive policy in public.
+            --    departments_read is intentional: department names are not
+            --    sensitive and the interface needs them everywhere.
             select count(*) into v from pg_policies
              where schemaname='public' and permissive='PERMISSIVE'
                and (qual = 'true' or qual is null)
                and policyname <> 'departments_read';
             if v > 0 then
-              raise exception '% politicas permisivas abiertas en public', v;
+              raise exception '% wide-open permissive policies in public', v;
             end if;
 
-            raise notice 'Las 4 invariantes se sostienen.';
+            raise notice 'All 4 invariants hold.';
           end \$\$;
           "

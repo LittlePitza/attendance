@@ -1,26 +1,27 @@
-# Latido para que el proyecto no se pause.
+# Heartbeat so the project does not get paused.
 #
-# Supabase pausa los proyectos del plan gratuito tras 7 dias de poca actividad
-# de BASE DE DATOS. Su documentacion es explicita: bastan unas pocas consultas
-# de usuario al dia para quedar excluido.
+# Supabase pauses Free plan projects after 7 days of low DATABASE activity.
+# Their documentation is explicit: a few user queries a day are enough to stay
+# excluded.
 #
-# En uso normal esto sobra: 31 personas marcando cuatro veces al dia generan
-# actividad de sobra. El problema son los periodos muertos -- la semana de
-# vacaciones de diciembre, o el tiempo entre hoy y el arranque real. Ahi es
-# donde el proyecto se pausa, y despausarlo requiere entrar al panel a mano.
+# In normal use this is redundant: 31 people punching four times a day generate
+# plenty of activity. The risk is the dead stretches — the week off in December,
+# or the gap between today and the actual rollout. That is when a project gets
+# paused, and un-pausing requires going into the dashboard by hand.
 #
-# Y si se pasa: hay 90 dias para restaurarlo desde el panel. Pasados los 90 dias
-# solo queda descargar el respaldo. Por eso este archivo y backup.yml se
-# complementan: uno evita la pausa, el otro cubre el caso de que llegue.
+# And if it does get paused: there is a 90-day window to restore it from the
+# dashboard. After 90 days the only option left is downloading the backup. That
+# is why this file and backup.yml complement each other — one avoids the pause,
+# the other covers the case where it happens anyway.
 #
-# Cuesta ~30 segundos de CI al dia y no consume cuota de Supabase de forma
-# apreciable: es una consulta que devuelve una fila.
+# Costs about 30 seconds of CI a day and consumes no meaningful Supabase quota:
+# it is a query that returns a single row.
 
-name: Latido
+name: Keepalive
 
 on:
   schedule:
-    # 14:00 UTC = 08:00 America/Mexico_City, en dias habiles y fines de semana.
+    # 14:00 UTC = 08:00 America/Mexico_City, weekdays and weekends alike.
     - cron: '0 14 * * *'
   workflow_dispatch:
 
@@ -30,33 +31,33 @@ concurrency:
 
 jobs:
   ping:
-    name: Consultar la base
+    name: Query the database
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
-      - name: Consulta minima
+      - name: Minimal query
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           set -euo pipefail
           if [ -z "${DB_URL:-}" ]; then
-            echo "Falta el secreto SUPABASE_DB_URL." >&2
+            echo "Missing the SUPABASE_DB_URL secret." >&2
             exit 1
           fi
-          # Tiene que ser una consulta de USUARIO sobre tablas de usuario:
-          # "select 1" no toca ninguna tabla y no esta claro que cuente como
-          # actividad. Esta lee dos catalogos reales y devuelve una fila.
+          # It has to be a USER query against user tables: "select 1" touches no
+          # table and it is not clear it would count as activity. This one reads
+          # two real catalogs and returns one row.
           psql "$DB_URL" -v ON_ERROR_STOP=1 -At -c "
-            select 'latido '
-                || (select count(*) from public.empleados)   || ' empleados, '
-                || (select count(*) from public.departments) || ' departamentos, '
+            select 'heartbeat '
+                || (select count(*) from public.empleados)   || ' employees, '
+                || (select count(*) from public.departments) || ' departments, '
                 || now();
           "
 
-      - name: Aviso si fallo
+      - name: Warn on failure
         if: failure()
         run: |
-          echo "::error::El latido fallo. Si se repite varios dias, el proyecto"
-          echo "::error::puede pausarse por inactividad. Revisar SUPABASE_DB_URL"
-          echo "::error::y el estado del proyecto en el panel de Supabase."
+          echo "::error::The keepalive failed. If this repeats for several days,"
+          echo "::error::the project may be paused for inactivity. Check"
+          echo "::error::SUPABASE_DB_URL and the project status in the dashboard."

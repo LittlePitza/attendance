@@ -1,3 +1,17 @@
+> **Historical document — kept in Spanish on purpose.**
+>
+> This is the original architecture plan, written before any code existed. It is
+> preserved as a record of how the project was reasoned about, not as current
+> guidance. Parts of it are now **out of date**: it describes the old Spanish
+> schema names (`checador`, `marcajes`, `jornadas`), assumes roles would live on
+> `empleados`, and treats `pg_cron`/`pg_net`/`pgTAP` as already installed when
+> they were only available.
+>
+> For what the system actually looks like today, read [the README](../README.md).
+> For how it is operated, [docs/runbook.md](runbook.md).
+
+---
+
 # Checador de Home Office — Plan de arquitectura e implementación
 
 ## Contexto

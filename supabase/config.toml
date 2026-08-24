@@ -1,23 +1,24 @@
-# Configuracion del proyecto para el CLI de Supabase.
+# Supabase CLI configuration for this project.
 #
-# Este archivo describe sobre todo el entorno LOCAL (`supabase start`), que
-# necesita Docker y hoy no se usa. Se versiona igual por dos razones: el CLI lo
-# pide para saber a que proyecto pertenece el directorio, y el dia que alguien
-# instale Docker el entorno local arranca igual que el remoto sin adivinar nada.
+# This file mostly describes the LOCAL environment (`supabase start`), which
+# needs Docker and is not used today. It is versioned anyway for two reasons:
+# the CLI needs it to know which project this directory belongs to, and the day
+# someone installs Docker the local environment comes up matching the remote one
+# without guesswork.
 #
-# Lo que SI aplica sin Docker: project_id, que es lo que usa `supabase link`.
+# What DOES apply without Docker: project_id, which is what `supabase link` uses.
 #
-# Ojo: los ajustes de auth de aqui NO se aplican solos al proyecto remoto. El
-# endurecimiento de contrasenas se configura en el panel. Ver docs/runbook.md.
+# Note: the auth settings below are NOT applied automatically to the remote
+# project. Password hardening is configured in the dashboard. See docs/runbook.md.
 
 project_id = "cyjpucvvekzfpvvonuld"
 
 [api]
 enabled = true
 port = 54321
-# Los esquemas expuestos por PostgREST. "internal" y "attendance" NO estan aqui
-# a proposito: el cliente no debe poder tocar esas tablas ni sus funciones
-# internas. Agregarlos deshace la mitad del modelo de seguridad.
+# Schemas exposed by PostgREST. "internal" and "attendance" are deliberately
+# absent: the client must not be able to touch those tables or their internal
+# functions. Adding them here undoes half the security model.
 schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
@@ -36,22 +37,22 @@ enabled = true
 site_url = "http://localhost:5173"
 additional_redirect_urls = ["http://localhost:5173"]
 
-# Sesion persistente: el empleado no reescribe su contrasena en semanas, pero
-# RH puede revocar el acceso de un equipo perdido y la sesion muere ahi.
+# Persistent session: the employee does not retype their password for weeks, but
+# HR can revoke access for a lost device and the session dies there.
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
 
-# No hay registro abierto: las cuentas las crea RH. Un checador donde
-# cualquiera se da de alta no sirve de nada.
+# No open signup: HR creates the accounts. A time clock where anyone can
+# register themselves is worthless.
 enable_signup = false
 
 [auth.email]
 enable_signup = false
 enable_confirmations = false
-# 12 caracteres. El bloqueo de contrasenas filtradas (HaveIBeenPwned) es
-# exclusivo del plan Pro, asi que la longitud y la variedad son la unica
-# defensa que queda. Ver docs/free-plan.md.
+
+# 12 characters. Leaked-password blocking (HaveIBeenPwned) is Pro only, so
+# length and variety are the only defense left. See docs/free-plan.md.
 [auth.email.password]
 min_length = 12
 required_characters = "abcdefghijklmnopqrstuvwxyz:ABCDEFGHIJKLMNOPQRSTUVWXYZ:0123456789:!@#$%^&*()-_=+[]{};'\"\\|,.<>/?"

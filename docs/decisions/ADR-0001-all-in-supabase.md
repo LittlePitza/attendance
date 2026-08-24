@@ -1,57 +1,55 @@
-# ADR-0001 — Todo en Supabase, sin motor de aplicación
+# ADR-0001 — Everything in Supabase, no application server
 
-- **Fecha:** 2026-08-24
-- **Estado:** Aceptada
-- **Afecta a:** toda la arquitectura
+- **Date:** 2026-08-24
+- **Status:** Accepted
+- **Scope:** the whole architecture
 
-## Contexto
+## Context
 
-El diseño inicial contemplaba un motor en Python que recibiera los marcajes,
-aplicara las reglas de negocio y escribiera en la base. La empresa ya tiene un
-proyecto Supabase (`pimsa_ti`) en producción con la mesa de ayuda de TI.
+The initial design called for a Python engine that would receive punches, apply
+the business rules and write to the database. The company already runs a
+Supabase project (`pimsa_ti`) in production with the IT help desk.
 
-Al verificar la documentación apareció un hecho que decide el asunto: **las
-Edge Functions de Supabase sólo ejecutan TypeScript sobre Deno. No existe
-runtime de Python.** Mantener Python habría exigido hospedar aparte un servidor
-de aplicación.
+While verifying the documentation, one fact settled the matter: **Supabase Edge
+Functions only run TypeScript on Deno. There is no Python runtime.** Keeping
+Python would have meant hosting a separate application server.
 
-## Decisión
+## Decision
 
-Las reglas de negocio viven **dentro de Postgres**, en funciones
-`SECURITY DEFINER`. Las Edge Functions se limitan a hablar con el mundo
-exterior (correo, altas de usuario, exportar) y no contienen ninguna regla. La
-PWA no tiene lógica: llama funciones y pinta datos.
+Business rules live **inside Postgres**, in `SECURITY DEFINER` functions. Edge
+Functions are limited to talking to the outside world (email, user provisioning,
+exports) and hold no rules. The PWA has no logic: it calls functions and renders
+data.
 
-## Razones
+## Rationale
 
-**No baja la seguridad; la sube.** Con un motor de aplicación existe un
-servidor que *puede* ser rodeado: quien consiga un token válido puede pegarle
-directo a la API REST de Postgres y saltarse las reglas del motor. Aquí eso no
-es posible, porque a `authenticated` no se le otorga **ningún** privilegio de
-escritura sobre las tablas. El único camino es la función, y la función valida.
+**It does not lower security; it raises it.** With an application server there
+is a component that *can* be bypassed: anyone holding a valid token can hit
+Postgres's REST API directly and skip the engine's rules. Here that is
+impossible, because `authenticated` is granted **no** write privilege on any
+table. The function is the only way in, and the function validates.
 
-**El sello de tiempo lo pone el reloj de la propia base**, no un proceso
-intermedio que podría estar desfasado o ser sustituido.
+**The timestamp comes from the database's own clock**, not from an intermediate
+process that could be out of sync or swapped out.
 
-**Menos piezas que operar.** No hay servidor que desplegar, monitorear,
-parchear ni pagar. La PWA son archivos estáticos.
+**Fewer moving parts to operate.** No server to deploy, monitor, patch or pay
+for. The PWA is static files.
 
-## Costo aceptado
+## Accepted cost
 
-Se pierde el ecosistema de Python para reportes — `pandas`, `openpyxl`.
-Generar XLSX en Deno se hace con SheetJS y es menos cómodo. Es el único costo
-real y cae fuera del núcleo.
+We give up Python's reporting ecosystem — `pandas`, `openpyxl`. Generating XLSX
+in Deno means SheetJS and is less convenient. It is the only real cost and it
+falls outside the core.
 
-La lógica en `plpgsql` es menos legible que en Python. Se compensa con
-`COMMENT ON` en cada función, este directorio de decisiones, y las pruebas de
-`supabase/tests/sql/`, que sirven de especificación viva.
+Logic in `plpgsql` is less readable than in Python. That is offset by
+`COMMENT ON` on every function, this decisions directory, and the tests in
+`supabase/tests/sql/`, which double as a living specification.
 
-## Consecuencias
+## Consequences
 
-- Toda función lleva `SET search_path = ''` y nombres calificados por completo.
-  Sin eso, un `search_path` manipulado permite secuestrarla.
-- Los esquemas `internal` y `attendance` **no** se exponen en la API.
-- El evaluador de alertas es SQL puro sobre `pg_cron`: no necesita salir de la
-  base, y así no consume invocaciones de Edge Functions —relevante en el plan
-  gratuito.
-- Verificar cualquier cambio exige probar SQL, no sólo TypeScript.
+- Every function carries `SET search_path = ''` and fully qualified names.
+  Without that, a manipulated `search_path` allows hijacking it.
+- The `internal` and `attendance` schemas are **not** exposed through the API.
+- The alert evaluator is plain SQL on `pg_cron`: it never leaves the database,
+  so it consumes no Edge Function invocations — which matters on the Free plan.
+- Verifying any change requires testing SQL, not just TypeScript.
