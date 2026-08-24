@@ -11,6 +11,7 @@ stand on its own.
 | | |
 |---|---|
 | **Status** | Backend SQL implemented · Local safety harness added · Client not started |
+| **Migrations** | 11 applied · 1 written and pending application |
 | **Database** | Supabase `pimsa_ti` (`cyjpucvvekzfpvvonuld`), Postgres 17, us-east-1 |
 | **Plan** | Free — see [docs/free-plan.md](docs/free-plan.md) |
 | **People** | 31 employees · 15 departments |
@@ -97,6 +98,7 @@ worthless.
 | `devices` | Devices each person punches from. Revocable |
 | `consents` | Privacy notice consent, per person and version |
 | `audit_events` | Audit log: every administrative action, including each lookup of coordinates |
+| `notification_outbox` | Queued alert notifications. Sending happens outside the transaction, and is retried |
 
 ### Schema `internal` — identity and triggers
 
@@ -178,8 +180,8 @@ attendance/
 │
 ├── supabase/
 │   ├── config.toml              CLI configuration
-│   ├── migrations/              11 migrations, all applied
-│   └── tests/sql/               engine verification (23 checks)
+│   ├── migrations/              12 migrations; the 12th is not applied yet
+│   └── tests/sql/               punch engine, alert engine, security invariants
 │
 └── .github/
     ├── workflows/
@@ -235,7 +237,7 @@ npm run db:stop
 
 `db:verify` assembles `.local/supabase`, starts an isolated Postgres container,
 replays the immutable migration history over a synthetic shared-schema baseline,
-loads synthetic seed data, and runs the engine and security SQL suites. It does
+loads synthetic seed data, and runs the three SQL suites. It does
 not accept a database URL or a project ref. See
 [docs/local-development.md](docs/local-development.md) for the complete workflow.
 
@@ -307,10 +309,26 @@ that actually matter:
 - Employee, manager, HR, admin and a role-less account each see exactly what
   they should.
 
-Run it only through `npm run db:verify` against the disposable local database.
+The alert suite (`supabase/tests/sql/alert_engine_test.sql`) pins the evaluator
+against a chosen instant, because "was this person late" is a question about a
+moment and cannot be tested against whatever time the suite happens to run:
+
+- Each of the seven kinds fires on the day it describes, with the minutes it
+  claims — late by 15, overdue by 90, 75 minutes of break against 60.
+- A break inside the threshold, a day with no schedule and a disabled rule all
+  stay silent.
+- Running the evaluator again — which production does every five minutes —
+  raises nothing new and queues no second notification.
+- An alert HR has already acknowledged is never reopened.
+- A department threshold overrides the global one.
+- Someone with no account raises nothing: they cannot punch, so they cannot be
+  late. The same fixture with an account raises the alert, so the silence means
+  something.
+
+Run them only through `npm run db:verify` against the disposable local database.
 The final `ROLLBACK` is defense in depth, not permission to test a live system.
 Verification is complete only when the generated database applies every
-migration and both SQL suites pass from a clean reset.
+migration and all three SQL suites pass from a clean reset.
 
 ### Not verified yet
 
@@ -332,14 +350,23 @@ rule 2 is verified by construction but not by experiment.
 | ✅ | Punch engine: state machine, idempotency, append-only, offline |
 | ✅ | Free plan maintenance and backups |
 | ⬜ | User accounts and Auth hardening |
-| ⬜ | Per-department schedules and the alert evaluator |
-| ⬜ | Email Edge Function (on top of `config_correo`) |
+| ✅ | Alert evaluator, thresholds per department, notification outbox |
+| ⬜ | Dispatcher Edge Function: drains the outbox over `config_correo` |
 | ⬜ | PWA: login, punch screen, offline queue, service worker |
 | ⬜ | HR dashboard and administration |
 
 ### Known debt
 
-- **SQL comments in the 11 migrations are still in Spanish.** They date from an
+- **There is no leave or absence table.** The evaluator has no way to know that
+  somebody is on holiday, so they collect a `missing_entry` every day until HR
+  dismisses it. Closing the gap is one extra condition inside
+  `evaluate_alerts()`, not a second evaluator — but until then the alert list
+  has predictable noise in it, and that is worth knowing before HR sees it.
+- **The outbox has no dispatcher yet.** `evaluate_alerts()` queues
+  notifications and nothing drains them. Deliberate: scheduling a call to an
+  Edge Function that does not exist would fill `cron.job_run_details` with
+  failures. The queue keeps the work until the dispatcher lands.
+- **SQL comments in the first 11 migrations are still in Spanish.** They date from an
   earlier language decision. Converting them is mechanical but also means
   updating the `COMMENT ON` strings already stored in the database, so it should
   be one deliberate pass rather than a drive-by edit.

@@ -31,8 +31,9 @@ test('prepareWorkspace creates an isolated local Supabase project', async (t) =>
   assert.match(config, /^project_id = "attendance-local"$/m);
   assert.doesNotMatch(config, new RegExp(productionProjectRef));
   assert.equal(migrations[0], '00000000000000_shared_schema_test_baseline.sql');
-  assert.equal(migrations.length, 12);
+  assert.equal(migrations.length, 13);
   assert.ok(migrations.includes('20260824172955_free_plan_maintenance.sql'));
+  assert.ok(migrations.includes('20260824191000_alert_evaluation_and_outbox.sql'));
   assert.equal(
     await readFile(path.join(generatedSupabase, 'seed.sql'), 'utf8'),
     await readFile(path.join(repositoryRoot, 'supabase/tests/fixtures/local_seed.sql'), 'utf8'),
@@ -56,6 +57,15 @@ test('buildSupabaseArguments permits only local database operations', () => {
       '--local',
       '--file',
       path.join(workdir, 'supabase', 'tests', 'sql', 'punch_engine_test.sql'),
+    ],
+    'alert-test': [
+      '--workdir',
+      workdir,
+      'db',
+      'query',
+      '--local',
+      '--file',
+      path.join(workdir, 'supabase', 'tests', 'sql', 'alert_engine_test.sql'),
     ],
     'security-test': [
       '--workdir',
@@ -115,6 +125,7 @@ test('executeLocalCommand verifies a clean local database in a fixed sequence', 
     buildSupabaseArguments('start', { workdir }),
     buildSupabaseArguments('reset', { workdir }),
     buildSupabaseArguments('engine-test', { workdir }),
+    buildSupabaseArguments('alert-test', { workdir }),
     buildSupabaseArguments('security-test', { workdir }),
   ]);
 });
@@ -140,15 +151,27 @@ test('repository development defaults cannot target production', async () => {
 });
 
 test('SQL verification files are plain SQL and local-only', async () => {
-  const engineTest = await readFile(
-    path.join(repositoryRoot, 'supabase', 'tests', 'sql', 'punch_engine_test.sql'),
-    'utf8',
-  );
+  const suiteDirectory = path.join(repositoryRoot, 'supabase', 'tests', 'sql');
+  const suiteFiles = (await readdir(suiteDirectory)).filter((name) => name.endsWith('.sql'));
 
-  assert.doesNotMatch(engineTest, /^\\/m);
-  assert.doesNotMatch(engineTest, /SUPABASE_DB_URL/);
-  assert.doesNotMatch(engineTest, /live database/i);
-  assert.match(engineTest, /\nrollback;\s*$/i);
+  assert.ok(suiteFiles.includes('punch_engine_test.sql'));
+  assert.ok(suiteFiles.includes('alert_engine_test.sql'));
+  assert.ok(suiteFiles.includes('security_invariants_test.sql'));
+
+  for (const suiteFile of suiteFiles) {
+    const suite = await readFile(path.join(suiteDirectory, suiteFile), 'utf8');
+
+    // psql meta-commands would not survive `supabase db query`.
+    assert.doesNotMatch(suite, /^\\/m, suiteFile);
+    assert.doesNotMatch(suite, /SUPABASE_DB_URL/, suiteFile);
+    assert.doesNotMatch(suite, /live database/i, suiteFile);
+
+    // A suite that writes has to end by throwing its writes away. The security
+    // invariants only read, so they open no transaction to close.
+    if (/^begin;\s*$/m.test(suite)) {
+      assert.match(suite, /\nrollback;\s*$/i, suiteFile);
+    }
+  }
 });
 
 test('runSupabaseCli launches the pinned cross-platform CLI entrypoint', async () => {

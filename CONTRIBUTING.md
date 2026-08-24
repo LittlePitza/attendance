@@ -42,6 +42,45 @@ uses `internal.parse_timestamptz()`, which returns null instead of raising, and
 each event is applied inside its own `begin ... exception` block. Both exist so
 one malformed event is rejected on its own instead of taking the batch with it.
 
+## The alert evaluator
+
+`attendance.evaluate_alerts(p_now)` is the only place that decides an alert
+exists. Cron calls it every five minutes with no argument; the suites call it
+with a chosen instant, which is the entire reason the parameter is there. It is
+not a way to rewrite history.
+
+Four properties it has to keep, because the schedule it runs on depends on all
+four:
+
+1. **Idempotent.** It sees the same day roughly 288 times before that day ends.
+   The unique `(employee_id, alert_date, kind)` on `alerts` and the unique
+   `idempotency_key` on `notification_outbox` are what make repetition free.
+2. **It never closes an alert.** An alert is a record of what happened, not a
+   live indicator. Somebody who missed the entry window and turned up two hours
+   later was still absent at 09:30. HR decides what that was worth, so the
+   upsert refreshes only rows that are still `open`.
+3. **It enqueues, it does not send.** A mail provider that is down must never
+   roll back attendance state. The evaluator writes to
+   `attendance.notification_outbox`; delivery is a separate Edge Function that
+   claims work through `claim_notifications()` and reports back through
+   `complete_notification()`.
+4. **It looks at yesterday too.** The Free plan pauses the project after seven
+   days of low activity and cron does not run while it is paused. Re-evaluating
+   the previous local day costs nothing and is what keeps an evening of missing
+   exits from being lost.
+
+Thresholds resolve department > global > the evaluator's own defaults. **No row
+in `alert_rules` is not the same as a disabled rule**: a missing row falls back
+to the default, so an alert kind is never switched off by absent configuration.
+
+Only employees who are active **and** linked to an account are evaluated:
+somebody who cannot punch cannot be late. The 31 accounts do not exist yet, so
+the evaluator raises nothing until they are provisioned.
+
+**Known gap:** there is no leave or absence table. Until there is one, a person
+on holiday collects a `missing_entry` every day, and HR dismisses them by hand.
+Adding one means an extra condition in the evaluator, not a second evaluator.
+
 
 ## Language
 
@@ -152,7 +191,7 @@ npm run db:stop
 `npm test` verifies the assembler, command allowlist, local-only configuration,
 portable CLI launcher and documentation guardrails. `npm run db:verify` then
 builds `.local/supabase`, starts local Postgres, resets it from all migrations
-and synthetic fixtures, and runs both SQL suites.
+and synthetic fixtures, and runs the three SQL suites.
 
 The wrapper accepts one known action and constructs every Supabase argument
 itself. There is no `--db-url`, link command, project selector or remote fallback.
@@ -169,7 +208,7 @@ boundary for an operating database.
 npm run db:prepare  # assemble the ignored local workspace
 npm run db:start    # start only the local database service
 npm run db:reset    # replay migrations and synthetic seed locally
-npm run db:test     # run engine and security SQL suites locally
+npm run db:test     # run the punch, alert and security SQL suites locally
 npm run db:verify   # start, reset and test in one command
 npm run db:stop     # stop this repository's local stack
 ```

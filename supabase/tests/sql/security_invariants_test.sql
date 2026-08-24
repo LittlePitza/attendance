@@ -33,6 +33,22 @@ begin
     raise exception 'authenticated can read exact punch coordinates';
   end if;
 
+  -- The notification outbox holds recipient addresses and delivery plumbing.
+  -- Employees, managers and HR have no business reading it at all, so it is not
+  -- granted even SELECT: the dispatcher reaches it with the service role.
+  select count(*)
+    into violation_count
+    from information_schema.role_table_grants
+   where table_schema = 'attendance'
+     and table_name = 'notification_outbox'
+     and grantee = 'authenticated';
+
+  if violation_count > 0 then
+    raise exception
+      'authenticated holds % privilege(s) on the notification outbox',
+      violation_count;
+  end if;
+
   -- RLS is a defense-in-depth boundary even though Attendance is not exposed by
   -- PostgREST.
   select count(*)

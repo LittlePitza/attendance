@@ -9,6 +9,14 @@ const productionProjectRef = 'cyjpucvvekzfpvvonuld';
 const localProjectId = 'attendance-local';
 const baselineFileName = '00000000000000_shared_schema_test_baseline.sql';
 const cliCommands = new Set(['prepare', 'start', 'reset', 'test', 'verify', 'stop']);
+
+// The SQL suites, in the order they run. Adding one is a line here and a file
+// in supabase/tests/sql; nothing else has to know about it.
+const sqlSuites = new Map([
+  ['engine-test', 'punch_engine_test.sql'],
+  ['alert-test', 'alert_engine_test.sql'],
+  ['security-test', 'security_invariants_test.sql'],
+]);
 const usage =
   'Usage: node scripts/local-supabase.mjs <prepare|start|reset|test|verify|stop>';
 
@@ -27,24 +35,19 @@ export function buildSupabaseArguments(command, { workdir = defaultLocalWorkdir 
   const commands = {
     start: [...prefix, 'db', 'start'],
     reset: [...prefix, 'db', 'reset', '--local'],
-    'engine-test': [
-      ...prefix,
-      'db',
-      'query',
-      '--local',
-      '--file',
-      path.join(resolvedWorkdir, 'supabase', 'tests', 'sql', 'punch_engine_test.sql'),
-    ],
-    'security-test': [
-      ...prefix,
-      'db',
-      'query',
-      '--local',
-      '--file',
-      path.join(resolvedWorkdir, 'supabase', 'tests', 'sql', 'security_invariants_test.sql'),
-    ],
     stop: [...prefix, 'stop', '--project-id', localProjectId],
   };
+
+  for (const [suiteCommand, suiteFile] of sqlSuites) {
+    commands[suiteCommand] = [
+      ...prefix,
+      'db',
+      'query',
+      '--local',
+      '--file',
+      path.join(resolvedWorkdir, 'supabase', 'tests', 'sql', suiteFile),
+    ];
+  }
 
   const arguments_ = commands[command];
   if (!arguments_) {
@@ -188,11 +191,12 @@ export async function executeLocalCommand(
 
   await assertDocker();
 
+  const suiteCommands = [...sqlSuites.keys()];
   const commandSequence = {
     start: ['start'],
     reset: ['reset'],
-    test: ['engine-test', 'security-test'],
-    verify: ['start', 'reset', 'engine-test', 'security-test'],
+    test: suiteCommands,
+    verify: ['start', 'reset', ...suiteCommands],
   }[command];
 
   for (const localCommand of commandSequence) {
