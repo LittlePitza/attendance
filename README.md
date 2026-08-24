@@ -1,6 +1,6 @@
 # Home Office Time Clock
 
-Attendance tracking for **Plásticos PIMSA**'s remote staff. Employees clock in,
+Attendance tracking for remote staff. Employees clock in,
 start and end breaks, and clock out from home; **the official timestamp comes
 from the server, not from their computer**; HR sees who is working in real time
 and gets alerts when someone misses their window.
@@ -163,9 +163,10 @@ several policies, they could drift apart without anyone noticing.
 ## Repository layout
 
 ```
-checador/
+attendance/
 ├── README.md                    this file
-├── CLAUDE.md                    working guide for this project
+├── CONTRIBUTING.md              working guide: rules, conventions, workflow
+├── SECURITY.md                  what counts as a vulnerability, how to report
 ├── .env.example                 variables; secrets do NOT go here
 │
 ├── docs/
@@ -179,10 +180,13 @@ checador/
 │   ├── migrations/              11 migrations, all applied
 │   └── tests/sql/               engine verification (23 checks)
 │
-└── .github/workflows/
-    ├── backup.yml               daily encrypted backup
-    ├── keepalive.yml            prevents pausing for inactivity
-    └── ci.yml                   tests + security invariants
+└── .github/
+    ├── workflows/
+    │   ├── backup.yml           daily encrypted backup
+    │   ├── keepalive.yml        prevents pausing for inactivity
+    │   └── ci.yml               tests + security invariants
+    ├── dependabot.yml           keeps the pinned actions current
+    └── PULL_REQUEST_TEMPLATE.md blast radius + migration checklist
 ```
 
 Still to be created, when the time comes: `web/` (the PWA) and
@@ -220,7 +224,7 @@ Requirements: Node 24, git. **Docker is not needed** — only `supabase start` a
 `functions serve` need it, they emulate everything locally and are optional.
 
 ```bash
-git clone <repo> && cd checador
+git clone <repo> && cd attendance
 cp .env.example .env          # fill in VITE_SUPABASE_PUBLISHABLE_KEY
 ```
 

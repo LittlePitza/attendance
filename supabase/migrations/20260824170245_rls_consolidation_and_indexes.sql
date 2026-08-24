@@ -8,7 +8,7 @@
 --    apunta.
 --
 -- 2. Dos politicas evaluaban auth.uid() una vez POR FILA. Es la causa clasica
---    de RLS lento y es justo lo que prohibe la regla 8 de CLAUDE.md; venian de
+--    de RLS lento y es justo lo que prohibe la regla 8 de CONTRIBUTING.md; venian de
 --    las migraciones 0002 y 0003, antes de que la regla estuviera escrita.
 --
 -- 3. Politicas SELECT duplicadas sobre la misma tabla y el mismo rol. Cuando

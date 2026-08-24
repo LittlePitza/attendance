@@ -1,0 +1,10 @@
+# Keeps the GitHub Actions pinned in .github/workflows up to date. Those
+# workflows hold the database connection string and the backup passphrase, so a
+# compromised or abandoned action is a direct path to both.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3

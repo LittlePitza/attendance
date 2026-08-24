@@ -1,5 +1,5 @@
-# Normaliza fin de linea: el repo siempre guarda LF, aunque se trabaje en Windows.
-# Sin esto, CRLF rompe scripts de shell y ensucia cada diff.
+# Normalize line endings: the repo always stores LF, even when working on
+# Windows. Without this, CRLF breaks shell scripts and pollutes every diff.
 * text=auto eol=lf
 
 *.sql   text eol=lf
@@ -11,7 +11,7 @@
 *.yml   text eol=lf
 *.toml  text eol=lf
 
-# Binarios: nunca tocar
+# Binaries: never touched
 *.png   binary
 *.jpg   binary
 *.ico   binary

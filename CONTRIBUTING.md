@@ -1,7 +1,11 @@
-# Checador — working guide for this project
+# Contributing
 
-Attendance tracking for Plásticos PIMSA's remote staff. Everything runs on
-Supabase: there is no application server.
+Working guide for this repository: where things live, the rules that are never
+broken, and the workflow for changing the database. Read it before writing the
+first migration.
+
+Attendance tracking for remote staff. Everything runs on Supabase: there is no
+application server.
 
 ## Where it lives
 

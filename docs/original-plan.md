@@ -342,7 +342,7 @@ código existente.
 
 ```
 checador/
-├─ README.md  CLAUDE.md  .gitattributes  .gitignore  .env.example
+├─ README.md  CONTRIBUTING.md  .gitattributes  .gitignore  .env.example
 ├─ docs/
 │  ├─ arquitectura.md   modelo-datos.md   seguridad.md
 │  ├─ aviso-de-privacidad.md   runbook.md

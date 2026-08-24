@@ -1,17 +1,22 @@
-# Secretos: nunca al repositorio
+# Secrets: never committed
 .env
 .env.*
 !.env.example
 supabase/.temp/
 supabase/.branches/
 
-# Dependencias y compilados
+# Backups: never committed, not even encrypted
+dump/
+*.tar.gz
+*.gpg
+
+# Dependencies and build output
 node_modules/
 dist/
 dist-ssr/
 *.local
 
-# Editores y sistema
+# Editors and OS
 .vscode/*
 !.vscode/settings.json
 .idea/
@@ -19,11 +24,6 @@ dist-ssr/
 Thumbs.db
 desktop.ini
 
-# Registros
+# Logs
 *.log
 npm-debug.log*
-
-# Respaldos: nunca al repositorio, ni cifrados
-dump/
-*.tar.gz
-*.gpg
