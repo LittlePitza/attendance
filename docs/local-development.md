@@ -41,7 +41,15 @@ npm run db:stop
 7. Start the local Supabase database service.
 8. Reset the local database from the generated migrations and seed.
 9. Run the punch-engine SQL suite.
-10. Run the grants, RLS and function security-invariant suite.
+10. Run the alert-evaluator SQL suite.
+11. Run the grants, RLS and function security-invariant suite.
+
+The suites are piped into `psql` inside the local database container rather than
+sent through `supabase db query`. That command submits a file as a single
+prepared statement, and Postgres rejects a prepared statement holding more than
+one command -- which every suite is: a transaction, the checks, a report and a
+rollback. A container name is also a narrower target than a connection string:
+there is no value it could take that reaches a database on another machine.
 
 Stop the local stack when finished:
 
@@ -108,7 +116,9 @@ The harness is designed around mechanical controls rather than operator memory:
 
 - The canonical config uses `project_id = "attendance-local"`.
 - Generated config is rejected if it contains the operating project ref.
-- Database reset and query actions always include `--local`.
+- The database reset action always includes `--local`.
+- The suites are addressed by container name, never by connection string,
+  and that name is derived from the same local project id as the config.
 - Every Supabase call is scoped with `--workdir` to `.local/supabase`.
 - There is no action for linking, login, `db push`, `migration up`, restore or
   arbitrary SQL.

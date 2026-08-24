@@ -9,14 +9,15 @@ const productionProjectRef = 'cyjpucvvekzfpvvonuld';
 const localProjectId = 'attendance-local';
 const baselineFileName = '00000000000000_shared_schema_test_baseline.sql';
 const cliCommands = new Set(['prepare', 'start', 'reset', 'test', 'verify', 'stop']);
+const databaseContainer = `supabase_db_${localProjectId}`;
 
 // The SQL suites, in the order they run. Adding one is a line here and a file
 // in supabase/tests/sql; nothing else has to know about it.
-const sqlSuites = new Map([
-  ['engine-test', 'punch_engine_test.sql'],
-  ['alert-test', 'alert_engine_test.sql'],
-  ['security-test', 'security_invariants_test.sql'],
-]);
+const sqlSuites = [
+  'punch_engine_test.sql',
+  'alert_engine_test.sql',
+  'security_invariants_test.sql',
+];
 const usage =
   'Usage: node scripts/local-supabase.mjs <prepare|start|reset|test|verify|stop>';
 
@@ -38,22 +39,61 @@ export function buildSupabaseArguments(command, { workdir = defaultLocalWorkdir 
     stop: [...prefix, 'stop', '--project-id', localProjectId],
   };
 
-  for (const [suiteCommand, suiteFile] of sqlSuites) {
-    commands[suiteCommand] = [
-      ...prefix,
-      'db',
-      'query',
-      '--local',
-      '--file',
-      path.join(resolvedWorkdir, 'supabase', 'tests', 'sql', suiteFile),
-    ];
-  }
-
   const arguments_ = commands[command];
   if (!arguments_) {
     throw new Error(`Unsupported local Supabase command: ${command}`);
   }
   return arguments_;
+}
+
+// The suites do not go through `supabase db query`. That command sends the file
+// as one prepared statement, and Postgres refuses a prepared statement holding
+// more than one command -- which every suite is by construction: a transaction,
+// the checks, a report and a rollback. psql inside the database container reads
+// the whole file, honours BEGIN/ROLLBACK and stops at the first error.
+//
+// It is also the narrowest target available. There is no connection string here
+// to point somewhere else by accident: the only thing named is a container that
+// this repository's own workflow started, on this machine.
+export function buildDatabaseShellArguments() {
+  return [
+    'exec',
+    '--interactive',
+    '--env',
+    'PGCLIENTENCODING=UTF8',
+    databaseContainer,
+    'psql',
+    '--username',
+    'postgres',
+    '--dbname',
+    'postgres',
+    '--no-psqlrc',
+    '--set',
+    'ON_ERROR_STOP=1',
+  ];
+}
+
+export async function runSqlSuite(
+  suiteFile,
+  { workdir = defaultLocalWorkdir, spawnProcess = spawnSync } = {},
+) {
+  const suitePath = path.join(path.resolve(workdir), 'supabase', 'tests', 'sql', suiteFile);
+  const sql = await readFile(suitePath, 'utf8');
+  const result = spawnProcess('docker', buildDatabaseShellArguments(), {
+    input: sql,
+    encoding: 'utf8',
+    stdio: ['pipe', 'inherit', 'inherit'],
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `SQL suite ${suiteFile} failed in container ${databaseContainer} ` +
+        `(exit status ${result.status}).`,
+    );
+  }
 }
 
 function localConfig(source) {
@@ -172,6 +212,7 @@ export async function executeLocalCommand(
     repositoryRoot = defaultRepositoryRoot,
     workdir = defaultLocalWorkdir,
     runSupabase = runSupabaseCli,
+    runSuite = runSqlSuite,
     assertDocker = assertDockerAvailable,
   } = {},
 ) {
@@ -191,17 +232,23 @@ export async function executeLocalCommand(
 
   await assertDocker();
 
-  const suiteCommands = [...sqlSuites.keys()];
   const commandSequence = {
     start: ['start'],
     reset: ['reset'],
-    test: suiteCommands,
-    verify: ['start', 'reset', ...suiteCommands],
+    test: [],
+    verify: ['start', 'reset'],
   }[command];
 
   for (const localCommand of commandSequence) {
     await runSupabase(buildSupabaseArguments(localCommand, { workdir }));
   }
+
+  if (command === 'test' || command === 'verify') {
+    for (const suiteFile of sqlSuites) {
+      await runSuite(suiteFile, { workdir });
+    }
+  }
+
   return prepared;
 }
 

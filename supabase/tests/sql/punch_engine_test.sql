@@ -10,11 +10,12 @@
 -- Run only against the disposable local database assembled by
 -- scripts/local-supabase.mjs. Everything also happens inside a transaction that
 -- ends in ROLLBACK, so no punch, workday or account link survives the test.
--- Deliberately not pgTAP: this is plain SQL that can run through
--- `supabase db query` without installing test functions in `public`.
+-- Deliberately not pgTAP: installing it would publish hundreds of test
+-- functions in `public`. This is plain SQL, and it carries no client-specific
+-- meta-commands, so any client can run it.
 --
--- Fails loudly: if a single check does not pass it raises an exception and the
--- Supabase CLI exits non-zero, which is what CI needs.
+-- Fails loudly: if a single check does not pass it raises an exception, and the
+-- runner passes ON_ERROR_STOP so psql exits non-zero, which is what CI needs.
 --
 -- Note on language: assertion names are in English, but a few literals stay in
 -- Spanish on purpose -- they match the error messages the database raises for

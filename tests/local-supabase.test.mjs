@@ -7,10 +7,12 @@ import { fileURLToPath } from 'node:url';
 
 import {
   assertDockerAvailable,
+  buildDatabaseShellArguments,
   buildSupabaseArguments,
   executeLocalCommand,
   parseCliCommand,
   prepareWorkspace,
+  runSqlSuite,
   runSupabaseCli,
 } from '../scripts/local-supabase.mjs';
 
@@ -49,33 +51,6 @@ test('buildSupabaseArguments permits only local database operations', () => {
   const expected = {
     start: ['--workdir', workdir, 'db', 'start'],
     reset: ['--workdir', workdir, 'db', 'reset', '--local'],
-    'engine-test': [
-      '--workdir',
-      workdir,
-      'db',
-      'query',
-      '--local',
-      '--file',
-      path.join(workdir, 'supabase', 'tests', 'sql', 'punch_engine_test.sql'),
-    ],
-    'alert-test': [
-      '--workdir',
-      workdir,
-      'db',
-      'query',
-      '--local',
-      '--file',
-      path.join(workdir, 'supabase', 'tests', 'sql', 'alert_engine_test.sql'),
-    ],
-    'security-test': [
-      '--workdir',
-      workdir,
-      'db',
-      'query',
-      '--local',
-      '--file',
-      path.join(workdir, 'supabase', 'tests', 'sql', 'security_invariants_test.sql'),
-    ],
     stop: ['--workdir', workdir, 'stop', '--project-id', 'attendance-local'],
   };
 
@@ -90,6 +65,79 @@ test('buildSupabaseArguments permits only local database operations', () => {
   assert.throws(
     () => buildSupabaseArguments('push', { workdir }),
     /Unsupported local Supabase command: push/,
+  );
+
+  // The suites are not a Supabase CLI command any more. `db query` sends a file
+  // as one prepared statement and Postgres rejects a prepared statement holding
+  // several commands, so that path never ran a suite at all.
+  assert.throws(
+    () => buildSupabaseArguments('engine-test', { workdir }),
+    /Unsupported local Supabase command: engine-test/,
+  );
+});
+
+test('buildDatabaseShellArguments reaches only this repository local container', () => {
+  const arguments_ = buildDatabaseShellArguments();
+
+  assert.deepEqual(arguments_, [
+    'exec',
+    '--interactive',
+    '--env',
+    'PGCLIENTENCODING=UTF8',
+    'supabase_db_attendance-local',
+    'psql',
+    '--username',
+    'postgres',
+    '--dbname',
+    'postgres',
+    '--no-psqlrc',
+    '--set',
+    'ON_ERROR_STOP=1',
+  ]);
+
+  // A container name cannot be pointed at a remote database. There is nothing
+  // here shaped like a connection string, a host or a project reference.
+  for (const argument of arguments_) {
+    assert.doesNotMatch(argument, /postgres(ql)?:\/\//);
+    assert.doesNotMatch(argument, /--db-url|--linked|--host|--port/);
+    assert.doesNotMatch(argument, new RegExp(productionProjectRef));
+    assert.doesNotMatch(argument, /supabase\.co|supabase\.com/);
+  }
+
+  // Without this a failing check would be reported and the suite would still
+  // exit zero, which is how a green build hides a red test.
+  assert.ok(arguments_.includes('ON_ERROR_STOP=1'));
+});
+
+test('runSqlSuite pipes the suite and fails loudly on a non-zero exit', async (t) => {
+  const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'attendance-suite-'));
+  t.after(() => rm(temporaryRoot, { recursive: true, force: true }));
+
+  const workdir = path.join(temporaryRoot, 'workspace');
+  await prepareWorkspace({ repositoryRoot, workdir });
+
+  const calls = [];
+  const spawnProcess = (command, arguments_, options) => {
+    calls.push({ command, arguments_, input: options.input });
+    return { error: undefined, status: 0, stderr: '' };
+  };
+
+  await runSqlSuite('punch_engine_test.sql', { workdir, spawnProcess });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].command, 'docker');
+  assert.deepEqual(calls[0].arguments_, buildDatabaseShellArguments());
+  assert.equal(
+    calls[0].input,
+    await readFile(path.join(repositoryRoot, 'supabase/tests/sql/punch_engine_test.sql'), 'utf8'),
+  );
+
+  await assert.rejects(
+    runSqlSuite('punch_engine_test.sql', {
+      workdir,
+      spawnProcess: () => ({ error: undefined, status: 3, stderr: '' }),
+    }),
+    /punch_engine_test\.sql failed .*exit status 3/,
   );
 });
 
@@ -109,24 +157,31 @@ test('executeLocalCommand verifies a clean local database in a fixed sequence', 
   t.after(() => rm(temporaryRoot, { recursive: true, force: true }));
 
   const workdir = path.join(temporaryRoot, 'workspace');
-  const calls = [];
-  const runSupabase = async (arguments_) => {
-    calls.push(arguments_);
-  };
+  const cliCalls = [];
+  const suiteCalls = [];
 
   await executeLocalCommand('verify', {
     assertDocker: async () => {},
     repositoryRoot,
     workdir,
-    runSupabase,
+    runSupabase: async (arguments_) => {
+      cliCalls.push(arguments_);
+    },
+    runSuite: async (suiteFile) => {
+      suiteCalls.push(suiteFile);
+    },
   });
 
-  assert.deepEqual(calls, [
+  // The database is rebuilt before anything reads it, and the suites run in a
+  // fixed order against that rebuilt state.
+  assert.deepEqual(cliCalls, [
     buildSupabaseArguments('start', { workdir }),
     buildSupabaseArguments('reset', { workdir }),
-    buildSupabaseArguments('engine-test', { workdir }),
-    buildSupabaseArguments('alert-test', { workdir }),
-    buildSupabaseArguments('security-test', { workdir }),
+  ]);
+  assert.deepEqual(suiteCalls, [
+    'punch_engine_test.sql',
+    'alert_engine_test.sql',
+    'security_invariants_test.sql',
   ]);
 });
 
@@ -161,7 +216,8 @@ test('SQL verification files are plain SQL and local-only', async () => {
   for (const suiteFile of suiteFiles) {
     const suite = await readFile(path.join(suiteDirectory, suiteFile), 'utf8');
 
-    // psql meta-commands would not survive `supabase db query`.
+    // Meta-commands keep a suite tied to one client. These files stay plain SQL
+    // that any client can run; ON_ERROR_STOP is passed on the command line.
     assert.doesNotMatch(suite, /^\\/m, suiteFile);
     assert.doesNotMatch(suite, /SUPABASE_DB_URL/, suiteFile);
     assert.doesNotMatch(suite, /live database/i, suiteFile);

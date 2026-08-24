@@ -1,5 +1,5 @@
 -- Security invariants for the disposable local database.
--- This file contains plain SQL so it can run through `supabase db query`.
+-- Plain SQL with no client-specific meta-commands: any client can run it.
 
 do $invariants$
 declare
