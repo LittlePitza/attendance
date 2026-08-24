@@ -88,6 +88,22 @@ select j.jobname, d.status, d.start_time, d.return_message
 
 -- 3. Punches waiting on HR review.
 select count(*) from attendance.punches where needs_review;
+
+-- 4. Alerts nobody has looked at, oldest first.
+select kind, severity, count(*), min(alert_date) as oldest
+  from attendance.alerts
+ where state = 'open'
+ group by kind, severity
+ order by oldest;
+
+-- 5. Notifications that are not moving. Both cases are worth a look: 'failed'
+--    gave up after eight attempts, and a row claimed for over 15 minutes means
+--    a dispatcher died mid-send.
+select id, status, attempts, next_attempt_at, left(last_error, 120) as last_error
+  from attendance.notification_outbox
+ where status = 'failed'
+    or (status = 'sending' and updated_at < now() - interval '15 minutes')
+ order by updated_at;
 ```
 
 And in GitHub, under `Actions`: **Respaldo diario** and **Latido** should be
@@ -182,6 +198,51 @@ messages are written in Spanish.
 rejects any `UPDATE`, even from the service role. The correction is a new row in
 `attendance.adjustments`, with a mandatory reason of at least 10 characters.
 That is what makes the record defensible: nothing changes silently.
+
+### HR is getting alerts that should not exist
+
+Do not delete the alert and do not stop the cron job. Alerts are dismissed
+(`state = 'dismissed'`), which keeps the record of what the system saw, and the
+rule behind them is turned off or widened where it lives:
+
+```sql
+-- Widen the threshold for one department, in minutes.
+insert into attendance.alert_rules (department_id, kind, threshold_minutes)
+values ('<department-uuid>', 'missing_exit', 240)
+-- The unique index on (department_id, kind) is partial -- global rules keep a
+-- null department -- so the WHERE has to be repeated here or Postgres cannot
+-- match the index.
+on conflict (department_id, kind) where department_id is not null do update
+   set threshold_minutes = excluded.threshold_minutes, active = true;
+
+-- Or switch the kind off globally, which is a decision, not a workaround.
+update attendance.alert_rules
+   set active = false
+ where kind = 'no_connection' and department_id is null;
+```
+
+Two causes account for most of the noise. The first is somebody on holiday:
+there is no leave table yet, so they collect a `missing_entry` every day until
+one exists. The second is an employee whose account was provisioned before they
+started using the system -- the evaluator only looks at people with an account,
+so linking an account is what puts somebody under watch.
+
+### Nobody is receiving alert email
+
+The alert and the email are separate on purpose, so check which half is broken:
+
+```sql
+-- Are alerts being raised at all? If not, the evaluator or its cron job.
+select max(created_at) from attendance.alerts;
+
+-- Are they queued? If they are and nothing is sent, it is the dispatcher.
+select status, count(*), max(created_at) from attendance.notification_outbox
+ group by status;
+```
+
+Nothing is lost while the dispatcher is down: the outbox keeps the work and
+retries with backoff. A row that reached `failed` stopped after eight attempts
+and needs a decision, not a retry loop.
 
 ### Revoking the device of someone who lost their laptop
 
