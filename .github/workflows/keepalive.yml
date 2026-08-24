@@ -1,0 +1,62 @@
+# Latido para que el proyecto no se pause.
+#
+# Supabase pausa los proyectos del plan gratuito tras 7 dias de poca actividad
+# de BASE DE DATOS. Su documentacion es explicita: bastan unas pocas consultas
+# de usuario al dia para quedar excluido.
+#
+# En uso normal esto sobra: 31 personas marcando cuatro veces al dia generan
+# actividad de sobra. El problema son los periodos muertos -- la semana de
+# vacaciones de diciembre, o el tiempo entre hoy y el arranque real. Ahi es
+# donde el proyecto se pausa, y despausarlo requiere entrar al panel a mano.
+#
+# Y si se pasa: hay 90 dias para restaurarlo desde el panel. Pasados los 90 dias
+# solo queda descargar el respaldo. Por eso este archivo y backup.yml se
+# complementan: uno evita la pausa, el otro cubre el caso de que llegue.
+#
+# Cuesta ~30 segundos de CI al dia y no consume cuota de Supabase de forma
+# apreciable: es una consulta que devuelve una fila.
+
+name: Latido
+
+on:
+  schedule:
+    # 14:00 UTC = 08:00 America/Mexico_City, en dias habiles y fines de semana.
+    - cron: '0 14 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    name: Consultar la base
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Consulta minima
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DB_URL:-}" ]; then
+            echo "Falta el secreto SUPABASE_DB_URL." >&2
+            exit 1
+          fi
+          # Tiene que ser una consulta de USUARIO sobre tablas de usuario:
+          # "select 1" no toca ninguna tabla y no esta claro que cuente como
+          # actividad. Esta lee dos catalogos reales y devuelve una fila.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -At -c "
+            select 'latido '
+                || (select count(*) from public.empleados)   || ' empleados, '
+                || (select count(*) from public.departments) || ' departamentos, '
+                || now();
+          "
+
+      - name: Aviso si fallo
+        if: failure()
+        run: |
+          echo "::error::El latido fallo. Si se repite varios dias, el proyecto"
+          echo "::error::puede pausarse por inactividad. Revisar SUPABASE_DB_URL"
+          echo "::error::y el estado del proyecto en el panel de Supabase."

@@ -1,0 +1,87 @@
+# Respaldo diario de la base.
+#
+# Por que existe: el plan gratuito de Supabase NO hace respaldos, ni
+# automaticos ni descargables. Un registro de asistencia sin respaldo es
+# indefendible en una aclaracion de nomina, asi que el respaldo lo hacemos
+# nosotros. Corre en GitHub, no en la maquina de nadie: no depende de que
+# alguien deje la computadora encendida.
+#
+# El volcado se CIFRA antes de subirse. Contiene los datos personales de 31
+# personas y su asistencia; un artefacto de GitHub lo puede descargar cualquiera
+# con acceso de lectura al repositorio. Sin cifrar seria una fuga esperando a
+# pasar.
+#
+# Efecto secundario util: este trabajo consulta la base todos los dias, y eso
+# por si solo cuenta como actividad para no caer en la pausa por inactividad.
+# Aun asi hay un keepalive aparte, porque si este falla el proyecto no debe
+# quedarse sin latido.
+
+name: Respaldo diario
+
+on:
+  schedule:
+    # 10:00 UTC = 04:00 America/Mexico_City. Despues de las tareas de pg_cron.
+    - cron: '0 10 * * *'
+  workflow_dispatch:        # tambien a mano, antes de una migracion grande
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  dump:
+    name: Volcar y cifrar
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Instalar Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Volcar esquema, datos y roles
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DB_URL:-}" ]; then
+            echo "Falta el secreto SUPABASE_DB_URL. Ver docs/free-plan.md" >&2
+            exit 1
+          fi
+          mkdir -p dump
+          # Tres piezas separadas: asi se puede restaurar solo el esquema, o
+          # solo los datos, sin tener que editar un archivo de 14 MB a mano.
+          supabase db dump --db-url "$DB_URL" -f dump/roles.sql  --role-only
+          supabase db dump --db-url "$DB_URL" -f dump/schema.sql
+          supabase db dump --db-url "$DB_URL" -f dump/data.sql   --data-only
+          ls -lh dump/
+
+      - name: Cifrar
+        env:
+          PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PASSPHRASE:-}" ]; then
+            echo "Falta el secreto BACKUP_PASSPHRASE. No se sube nada sin cifrar." >&2
+            exit 1
+          fi
+          tar -czf dump.tar.gz -C dump .
+          gpg --batch --yes --symmetric --cipher-algo AES256 \
+              --passphrase "$PASSPHRASE" \
+              --output "respaldo-$(date -u +%Y%m%d).tar.gz.gpg" \
+              dump.tar.gz
+          # El material sin cifrar no debe llegar al artefacto.
+          rm -rf dump dump.tar.gz
+          ls -lh respaldo-*.gpg
+
+      - name: Subir artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: respaldo-${{ github.run_id }}
+          path: respaldo-*.tar.gz.gpg
+          # 30 dias, no 90: GitHub Free da 500 MB de almacenamiento de
+          # artefactos, y guardar 90 copias lo desbordaria. Para conservar mas
+          # tiempo, descargar la copia del primer dia del mes y guardarla fuera.
+          retention-days: 30
+          if-no-files-found: error

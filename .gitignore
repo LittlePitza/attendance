@@ -22,3 +22,8 @@ desktop.ini
 # Registros
 *.log
 npm-debug.log*
+
+# Respaldos: nunca al repositorio, ni cifrados
+dump/
+*.tar.gz
+*.gpg
