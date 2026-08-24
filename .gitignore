@@ -1,0 +1,24 @@
+# Secretos: nunca al repositorio
+.env
+.env.*
+!.env.example
+supabase/.temp/
+supabase/.branches/
+
+# Dependencias y compilados
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Editores y sistema
+.vscode/*
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Registros
+*.log
+npm-debug.log*
