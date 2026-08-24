@@ -136,14 +136,23 @@ Two deliberate exceptions:
    to "Exposed schemas"**.
 
    What **does** live in `public` on purpose, because the client has to call it
-   over REST: `my_profile()`, `server_time()`, `punch()`, `sync_punches()` and
-   `heartbeat()`. The advisors flag the last three as "SECURITY DEFINER
-   executable by authenticated": **that is the design**, not a finding. They are
-   the only write path, so they must elevate privileges.
+   over REST: `my_profile()`, `server_time()`, `punch()`, `sync_punches()`,
+   `heartbeat()`, `my_day()`, `my_history()`, `team_day()` and `open_alerts()`.
+   The advisors flag `punch`, `sync_punches` and `heartbeat` as "SECURITY
+   DEFINER executable by authenticated": **that is the design**, not a finding.
+   They are the only write path, so they must elevate privileges.
 
 8. **Wrap calls in `(select ...)` inside RLS policies**:
    `using ((select internal.caller_role()) = 'admin')`. That way Postgres
    evaluates them once per statement instead of once per row.
+
+9. **Writes elevate; reads do not.** The four read functions are `SECURITY
+   INVOKER`, and adding a fifth that is `DEFINER` needs a reason written down.
+   `internal.can_view_employee()` already decides who sees whom and the column
+   grants already withhold `geo_lat` and `geo_lng`; a read function that
+   elevated would have to reimplement both and could get either wrong quietly.
+   As invoker, the worst a bug in one of them can do is display the wrong thing
+   to somebody already entitled to it.
 
 ## Code conventions
 

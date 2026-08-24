@@ -42,7 +42,9 @@ npm run db:stop
 8. Reset the local database from the generated migrations and seed.
 9. Run the punch-engine SQL suite.
 10. Run the alert-evaluator SQL suite.
-11. Run the grants, RLS and function security-invariant suite.
+11. Run the read-API suite, which switches to the `authenticated` role so the
+    RLS policies are executed by the role they were written for.
+12. Run the grants, RLS and function security-invariant suite.
 
 The suites are piped into `psql` inside the local database container rather than
 sent through `supabase db query`. That command submits a file as a single
@@ -65,8 +67,8 @@ npm run db:stop
 | `npm run db:prepare` | Rebuild `.local/supabase`; no Docker or database |
 | `npm run db:start` | Prepare the workspace and start local Postgres |
 | `npm run db:reset` | Prepare and reset only the local database |
-| `npm run db:test` | Prepare and run the three SQL suites against local Postgres |
-| `npm run db:verify` | Prepare, start, reset and run the three SQL suites |
+| `npm run db:test` | Prepare and run the four SQL suites against local Postgres |
+| `npm run db:verify` | Prepare, start, reset and run the four SQL suites |
 | `npm run db:stop` | Stop the stack identified as `attendance-local` |
 
 The CLI accepts exactly one action. Extra flags and arguments are rejected, so a
