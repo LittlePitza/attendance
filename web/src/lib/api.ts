@@ -4,10 +4,13 @@ import type {
   HeartbeatResult,
   MyDay,
   OfflinePunchEvent,
+  OpenAlert,
+  Profile,
   PunchKind,
   PunchResult,
   ServerTime,
   SyncResult,
+  TeamMember,
 } from './types';
 
 /**
@@ -69,4 +72,22 @@ export const api = {
 
   /** Proof of life while a workday is open. Feeds the `no_connection` alert. */
   heartbeat: (): Promise<HeartbeatResult> => rpc<HeartbeatResult>('heartbeat'),
+
+  /**
+   * Who is signed in, and what they are allowed to see. One row, or none at
+   * all when the account is not linked to an employee.
+   */
+  myProfile: async (): Promise<Profile | null> =>
+    (await rpc<Profile[]>('my_profile'))[0] ?? null,
+
+  /**
+   * The board: every employee the caller may see, on one date. Who that is
+   * comes from RLS, never from a role check written in the browser.
+   */
+  teamDay: (date?: string): Promise<TeamMember[]> =>
+    rpc<TeamMember[]>('team_day', date === undefined ? {} : { p_date: date }),
+
+  /** What the evaluator raised and nobody has dealt with. */
+  openAlerts: (since?: string): Promise<OpenAlert[]> =>
+    rpc<OpenAlert[]>('open_alerts', since === undefined ? {} : { p_since: since }),
 } as const;

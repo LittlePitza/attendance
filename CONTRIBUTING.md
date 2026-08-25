@@ -151,6 +151,27 @@ Where that gets decided in practice:
 rather than generated. It is small, and a generated file would hide the moment
 the contract moved.
 
+**The board** (`web/src/features/hr/`) follows the same rule, and it is worth
+saying where it bites: the board **never works out who was late**. Whether an
+arrival counts as late depends on the schedule, the grace period and the
+department's threshold, and `attendance.evaluate_alerts()` is the only thing
+that resolves all three. Everything the board shows is grouping and counting of
+facts the database already reported; lateness arrives as a `late_entry` alert.
+It also offers no way to close one, because an alert is a record of what
+happened rather than a notification to clear.
+
+The role decides which screen opens and nothing else. `team_day()` and
+`open_alerts()` are `SECURITY INVOKER`, so a manager gets their department and
+HR gets everyone without a single role check in the browser -- a role tampered
+with in devtools changes what is offered, never what comes back.
+
+**No UI framework, and no icon package.** The whole client has four runtime
+dependencies. A component library would bring a build-time toolchain and dozens
+of transitive packages to style what is, in total, two screens; the icons are
+nine hand-drawn SVG paths for the same reason. Fonts stay on the system stack
+because a web font is a network dependency and this application is offline
+first.
+
 ## Language
 
 **Code, structure and documentation in English. User-facing text in Spanish.**

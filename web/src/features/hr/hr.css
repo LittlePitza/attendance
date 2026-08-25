@@ -1,0 +1,869 @@
+/*
+ * The board's own stylesheet.
+ *
+ * `app.css` dresses four screens of markup for a phone held at the start of a
+ * shift: one narrow column, large targets, nothing clever. This is the opposite
+ * brief -- a dense grid read on a desk, often left open all day -- so it gets
+ * its own file rather than doubling the length of that one. It extends those
+ * tokens and never redefines them: `.card`, `.button`, `.notice` and `.tag` are
+ * the same components on both screens, and they should stay that way.
+ *
+ * Typography stays on the system stack. The dual sans/mono pairing this design
+ * calls for is real and useful -- figures line up in a monospace column and
+ * stop jittering as they count -- but a web font is a network dependency, and
+ * this is an offline-first application. `font-variant-numeric: tabular-nums`
+ * buys the alignment that actually mattered, for nothing.
+ */
+
+.hr {
+  /* Dense scale. A shift board is read by scanning, and every extra pixel of
+   * padding is a row that fell off the bottom of the screen. */
+  --hr-gap: 0.875rem;
+  --hr-pad: 1.125rem;
+
+  --tone-working: #4ade80;
+  --tone-break: #fbbf24;
+  --tone-pending: #94a3b8;
+  --tone-done: #38bdf8;
+  --tone-alert: #f87171;
+
+  --surface-sunken: #0b1220;
+  --surface-hover: #24324a;
+
+  --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Segoe UI Mono', 'Roboto Mono', monospace;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-gap);
+  margin-inline: auto;
+  max-width: 90rem;
+  padding: 0 var(--hr-pad) calc(2rem + env(safe-area-inset-bottom));
+}
+
+/* ------------------------------------------------------------------ bar --- */
+
+.hr__bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hr-gap);
+
+  margin-inline: calc(var(--hr-pad) * -1);
+  padding: max(0.875rem, env(safe-area-inset-top)) var(--hr-pad) 0.875rem;
+
+  border-bottom: 1px solid var(--line);
+  /* The rows scroll under this, so it has to be opaque enough to read against
+   * and translucent enough that it does not look pasted on top. */
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.hr__identity {
+  flex: 1 1 14rem;
+}
+
+.hr__title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.hr__subtitle {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin: 0.125rem 0 0;
+  color: var(--ink-muted);
+  font-size: 0.875rem;
+}
+
+/* Spanish writes the weekday in lower case and the formatter obliges. Only the
+ * opening letter is raised -- `capitalize` would raise every word and produce
+ * "24 De Agosto". */
+.hr__subtitle::first-letter {
+  text-transform: uppercase;
+}
+
+.hr__clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+}
+
+.hr__dates,
+.hr__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.hr__actions {
+  margin-inline-start: auto;
+}
+
+.hr .button {
+  min-height: 2.75rem;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.875rem;
+}
+
+/* Square, and still past the 44px minimum in both directions. */
+.hr .button--icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  padding: 0;
+}
+
+/* `progress` belongs to the punch button, which really is busy while it waits.
+ * A date step that is disabled is not working on anything. */
+.hr .button:disabled {
+  cursor: not-allowed;
+}
+
+.glyph {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+/* ---------------------------------------------------------------- stats --- */
+
+.hr__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: var(--hr-gap);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem;
+  text-align: start;
+  /* Entrance is staggered by index so the row assembles left to right. */
+  animation: rise 420ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+  animation-delay: calc(var(--index, 0) * 55ms);
+}
+
+button.stat {
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+button.stat:hover {
+  transform: translateY(-2px);
+  border-color: var(--tone);
+  background: var(--surface-hover);
+}
+
+button.stat:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.stat--working {
+  --tone: var(--tone-working);
+}
+.stat--break {
+  --tone: var(--tone-break);
+}
+.stat--pending {
+  --tone: var(--tone-pending);
+}
+.stat--done {
+  --tone: var(--tone-done);
+}
+.stat--alert {
+  --tone: var(--tone-alert);
+}
+
+/* Selected reads as a filter that is on: the tone floods the card instead of
+ * being a tick somebody has to hunt for. */
+.stat--selected {
+  border-color: var(--tone);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--tone) 18%, transparent),
+      transparent 60%
+    ),
+    var(--surface-raised);
+}
+
+.stat__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.stat__label {
+  color: var(--ink-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.stat__icon {
+  display: grid;
+  place-items: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--tone) 16%, transparent);
+  color: var(--tone);
+}
+
+.stat__value {
+  font-family: var(--mono);
+  font-size: 2rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.stat__caption {
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+}
+
+/* --------------------------------------------------------------- panels --- */
+
+.hr__split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  align-items: start;
+  gap: var(--hr-gap);
+}
+
+.hr__panel {
+  animation: rise 420ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+  animation-delay: 220ms;
+}
+
+.hr__panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hr-gap);
+  margin-bottom: 0.875rem;
+}
+
+.hr__panel-head .card__title {
+  margin: 0;
+}
+
+.hr__panel-note {
+  color: var(--ink-muted);
+  font-size: 0.8125rem;
+}
+
+.hr__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-inline-start: auto;
+}
+
+.hr__footer {
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  margin: 0;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------- statebar --- */
+
+.statebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.statebar__track {
+  display: flex;
+  overflow: hidden;
+  height: 0.625rem;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+}
+
+.statebar__segment {
+  /* Width is a transition, so a refresh that moves one person between states
+   * slides rather than jumping. */
+  transition: width 520ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.statebar__segment--working {
+  background: var(--tone-working);
+}
+.statebar__segment--break {
+  background: var(--tone-break);
+}
+.statebar__segment--pending {
+  background: var(--tone-pending);
+}
+.statebar__segment--done {
+  background: var(--tone-done);
+}
+
+.statebar__legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.625rem 1.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.statebar__item + .statebar__item {
+  border-top: 1px solid transparent;
+}
+
+.statebar__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  font-size: 0.8125rem;
+}
+
+.statebar__name {
+  color: var(--ink-muted);
+}
+
+.statebar__count {
+  margin-inline-start: auto;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.statebar__pct {
+  color: var(--ink-muted);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.5rem;
+  text-align: end;
+}
+
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex: none;
+}
+
+.dot--working {
+  background: var(--tone-working);
+}
+.dot--break {
+  background: var(--tone-break);
+}
+.dot--pending {
+  background: var(--tone-pending);
+}
+.dot--done {
+  background: var(--tone-done);
+}
+
+/* ------------------------------------------------------------ histogram --- */
+
+.histogram {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.25rem;
+  height: 7.5rem;
+}
+
+.histogram__column {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+  height: 100%;
+}
+
+.histogram__bar {
+  position: relative;
+  width: 100%;
+  height: var(--height);
+  min-height: 2px;
+  margin-top: auto;
+  border-radius: 5px 5px 2px 2px;
+  background: linear-gradient(180deg, var(--tone-done), color-mix(in srgb, var(--tone-done) 45%, transparent));
+  /* Grown from the baseline rather than faded in: the shape of the morning
+   * arrives, which is the thing worth looking at. */
+  animation: grow 500ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(260ms + var(--index, 0) * 22ms);
+  transform-origin: bottom;
+}
+
+.histogram__bar--empty {
+  background: var(--surface-sunken);
+}
+
+.histogram__count {
+  position: absolute;
+  top: -1.125rem;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--ink-muted);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.histogram__hour {
+  color: var(--ink-muted);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  min-height: 1em;
+}
+
+/* ---------------------------------------------------------------- board --- */
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.board__row {
+  display: grid;
+  /* Fixed tracks, not `auto`. Each row is its own grid, so an `auto` column
+   * sized itself to that row's content and a row carrying badges pushed its
+   * own times out of line with every other row. */
+  grid-template-columns: minmax(0, 1.7fr) 7rem minmax(0, 15rem) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--hr-gap);
+
+  padding: 0.75rem 0.875rem;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: var(--surface-sunken);
+
+  animation: rise 380ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+  animation-delay: calc(var(--index, 0) * 28ms);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.board__row:hover {
+  border-color: var(--line);
+  background: var(--surface-hover);
+}
+
+.board__who {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.board__name {
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board__dept {
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Fixed tracks for the same reason the row itself has them: content-sized
+ * columns let a shorter value slide the whole group out of line with the row
+ * above, and these are numbers meant to be compared down the column. */
+.board__times {
+  display: grid;
+  grid-template-columns: 6rem 4rem 4rem;
+  gap: 0.75rem;
+}
+
+.board__time {
+  display: flex;
+  flex-direction: column;
+}
+
+.board__time-label {
+  color: var(--ink-muted);
+  font-size: 0.6875rem;
+}
+
+.board__time-value {
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.board__expected {
+  color: var(--ink-muted);
+}
+
+.board__flags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.375rem;
+}
+
+.board__empty {
+  padding: 1.5rem 0;
+  text-align: center;
+}
+
+.chip {
+  justify-self: start;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 550;
+  padding: 0.2rem 0.7rem;
+  white-space: nowrap;
+}
+
+.chip--working {
+  background: color-mix(in srgb, var(--tone-working) 18%, transparent);
+  color: var(--tone-working);
+}
+.chip--break {
+  background: color-mix(in srgb, var(--tone-break) 18%, transparent);
+  color: var(--tone-break);
+}
+.chip--pending {
+  background: color-mix(in srgb, var(--tone-pending) 18%, transparent);
+  color: var(--tone-pending);
+}
+.chip--done {
+  background: color-mix(in srgb, var(--tone-done) 18%, transparent);
+  color: var(--tone-done);
+}
+
+.tag--alert {
+  border-color: var(--tone-alert);
+  color: var(--tone-alert);
+}
+
+.tag--offline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.tag--offline .glyph {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+/* --------------------------------------------------------------- alerts --- */
+
+.alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.alerts__row {
+  display: grid;
+  grid-template-columns: 3px 1fr auto;
+  align-items: center;
+  gap: 0.875rem;
+
+  padding: 0.625rem 0.875rem 0.625rem 0;
+  border-radius: 11px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+
+  animation: rise 380ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+  animation-delay: calc(240ms + var(--index, 0) * 30ms);
+}
+
+/* Severity is a colour and a position, never a colour alone: the kind and the
+ * detail beside it say what happened without reference to the stripe. */
+.alerts__severity {
+  align-self: stretch;
+}
+
+.alerts__severity--high {
+  background: var(--tone-alert);
+}
+.alerts__severity--medium {
+  background: var(--tone-break);
+}
+.alerts__severity--low {
+  background: var(--tone-pending);
+}
+
+.alerts__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.alerts__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.alerts__kind {
+  font-weight: 550;
+}
+
+.alerts__who {
+  color: var(--ink-muted);
+  font-size: 0.8125rem;
+}
+
+.alerts__detail {
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+}
+
+.alerts__date {
+  color: var(--ink-muted);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.alerts__empty {
+  padding: 1rem 0;
+}
+
+/* -------------------------------------------------------------- filters --- */
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search__icon {
+  position: absolute;
+  inset-inline-start: 0.625rem;
+  display: grid;
+  place-items: center;
+  color: var(--ink-muted);
+  pointer-events: none;
+}
+
+.search__input,
+.select__input {
+  min-height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 0.5rem 0.875rem;
+  transition: border-color 160ms ease;
+}
+
+.search__input {
+  padding-inline-start: 2.25rem;
+  width: 12rem;
+}
+
+.select__input {
+  cursor: pointer;
+}
+
+.search__input:hover,
+.select__input:hover {
+  border-color: var(--ink-muted);
+}
+
+.search__input:focus-visible,
+.select__input:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- state --- */
+
+.pulse {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--tone-working);
+  animation: pulse 2.2s ease-in-out infinite;
+}
+
+.pulse--off {
+  background: var(--ink-muted);
+  animation: none;
+}
+
+.skeleton {
+  border-color: transparent;
+  background: linear-gradient(
+    100deg,
+    var(--surface-raised) 30%,
+    var(--surface-hover) 50%,
+    var(--surface-raised) 70%
+  );
+  background-size: 220% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.skeleton--stat {
+  height: 7rem;
+}
+
+.skeleton--panel {
+  height: 11rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ----------------------------------------------------------- animations --- */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes grow {
+  from {
+    transform: scaleY(0);
+    opacity: 0.4;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--tone-working) 55%, transparent);
+  }
+  50% {
+    opacity: 0.75;
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+/* --------------------------------------------------------------- narrow --- */
+
+@media (max-width: 60rem) {
+  .board__row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'who chip'
+      'times times'
+      'flags flags';
+  }
+
+  .board__who {
+    grid-area: who;
+  }
+
+  .board__row .chip {
+    grid-area: chip;
+  }
+
+  .board__times {
+    grid-area: times;
+    justify-content: space-between;
+  }
+
+  .board__flags {
+    grid-area: flags;
+    justify-content: flex-start;
+  }
+
+  .board__flags:empty {
+    display: none;
+  }
+}
+
+@media (max-width: 40rem) {
+  .hr__actions {
+    margin-inline-start: 0;
+  }
+
+  .hr__filters {
+    margin-inline-start: 0;
+    width: 100%;
+  }
+
+  .search__input {
+    width: 100%;
+  }
+
+  .search {
+    flex: 1 1 8rem;
+  }
+}
+
+/*
+ * Everything above moves to show a change, never for decoration -- so when
+ * movement is unwelcome, the change still has to be visible. Animations are
+ * removed rather than shortened, and nothing depends on having seen one.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .hr *,
+  .hr *::before,
+  .hr *::after {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}

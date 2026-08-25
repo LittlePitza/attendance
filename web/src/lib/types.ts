@@ -117,3 +117,71 @@ export interface SyncResult {
   readonly rejected: number;
   readonly events: readonly SyncEventOutcome[];
 }
+
+/* ------------------------------------------------------------------ HR ---
+ * `my_profile()`, `team_day()` and `open_alerts()` are `returns table`, so
+ * PostgREST answers each of them with an array of rows -- unlike `my_day()`,
+ * which returns a single jsonb object. The API module is where that difference
+ * is absorbed, so nothing above it has to remember which is which.
+ */
+
+export const CALLER_ROLES = ['employee', 'manager', 'hr', 'admin', 'guest'] as const;
+export type CallerRole = (typeof CALLER_ROLES)[number];
+
+/**
+ * `employee_id` is null for an account that is not a person: there is an
+ * administrator that never punches. Anything that offers the punch screen has
+ * to check it rather than assume every session belongs to an employee.
+ */
+export interface Profile {
+  readonly role: CallerRole;
+  readonly employee_id: string | null;
+  readonly name: string | null;
+  readonly department_id: string | null;
+  readonly department: string | null;
+}
+
+export const ALERT_KINDS = [
+  'late_entry',
+  'missing_entry',
+  'break_exceeded',
+  'missing_exit',
+  'no_connection',
+  'review_offline',
+  'clock_tampered',
+] as const;
+export type AlertKind = (typeof ALERT_KINDS)[number];
+
+export const ALERT_SEVERITIES = ['high', 'medium', 'low'] as const;
+export type AlertSeverity = (typeof ALERT_SEVERITIES)[number];
+
+/** One employee's day, as `team_day()` reports it. Times are `HH:MM:SS`. */
+export interface TeamMember {
+  readonly employee_id: string;
+  readonly employee_name: string;
+  readonly department: string | null;
+  readonly work_date: string;
+  readonly state: WorkdayState;
+  readonly opened_at: string | null;
+  readonly closed_at: string | null;
+  readonly worked_seconds: number;
+  readonly break_seconds: number;
+  readonly last_heartbeat: string | null;
+  readonly has_offline: boolean;
+  readonly needs_review: boolean;
+  readonly entry_expected: string | null;
+  readonly exit_expected: string | null;
+}
+
+export interface OpenAlert {
+  readonly id: string;
+  readonly employee_id: string;
+  readonly employee_name: string;
+  readonly alert_date: string;
+  readonly kind: AlertKind;
+  readonly severity: AlertSeverity;
+  readonly state: string;
+  readonly details: Readonly<Record<string, unknown>>;
+  readonly created_at: string;
+  readonly notified_at: string | null;
+}

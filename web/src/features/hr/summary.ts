@@ -1,0 +1,177 @@
+import type { AlertSeverity, OpenAlert, TeamMember, WorkdayState } from '../../lib/types';
+import { WORKDAY_STATES } from '../../lib/types';
+
+/**
+ * Everything the board displays that is not a field of a row.
+ *
+ * All of it is grouping and counting -- facts the database already decided,
+ * arranged for the eye. Nothing here judges anything. In particular **the
+ * dashboard never works out who was late**: whether an arrival counted as late
+ * depends on the schedule, the grace and the department's threshold, and
+ * `attendance.evaluate_alerts()` is the only place that resolves those. What
+ * the board shows about lateness comes back as a `late_entry` alert.
+ *
+ * Pure on purpose. This is the part of the screen worth testing, and it can be
+ * tested without a database, a network or a DOM.
+ */
+
+export type StateCounts = Readonly<Record<WorkdayState, number>>;
+
+export interface TeamSummary {
+  readonly total: number;
+  readonly byState: StateCounts;
+  /** Rows the database flagged, not rows this module decided to flag. */
+  readonly needsReview: number;
+  readonly withOffline: number;
+  readonly workedSeconds: number;
+  readonly breakSeconds: number;
+}
+
+export function summarise(team: readonly TeamMember[]): TeamSummary {
+  const byState: Record<WorkdayState, number> = {
+    not_started: 0,
+    working: 0,
+    on_break: 0,
+    finished: 0,
+  };
+
+  let needsReview = 0;
+  let withOffline = 0;
+  let workedSeconds = 0;
+  let breakSeconds = 0;
+
+  for (const member of team) {
+    byState[member.state] += 1;
+    if (member.needs_review) {
+      needsReview += 1;
+    }
+    if (member.has_offline) {
+      withOffline += 1;
+    }
+    workedSeconds += member.worked_seconds;
+    breakSeconds += member.break_seconds;
+  }
+
+  return { total: team.length, byState, needsReview, withOffline, workedSeconds, breakSeconds };
+}
+
+/** The order the segmented bar and the filter chips both read in. */
+export const STATE_ORDER: readonly WorkdayState[] = WORKDAY_STATES;
+
+export interface HourBucket {
+  readonly hour: number;
+  readonly count: number;
+}
+
+/**
+ * When the day actually started, hour by hour.
+ *
+ * A distribution of a recorded fact, not a verdict about any of them. The zone
+ * is the reader's, matching `team_day()`, which resolves its date the same way:
+ * one person reads this board, in one place, and a column that shifted zone per
+ * row would be unreadable.
+ *
+ * Empty hours are kept so the shape of the morning is visible instead of being
+ * compressed away.
+ */
+export function entryHistogram(
+  team: readonly TeamMember[],
+  timeZone: string,
+  from = 6,
+  to = 20,
+): HourBucket[] {
+  const counts = new Map<number, number>();
+
+  for (const member of team) {
+    if (member.opened_at === null) {
+      continue;
+    }
+
+    const hour = hourIn(member.opened_at, timeZone);
+    if (hour === null) {
+      continue;
+    }
+
+    const clamped = Math.min(Math.max(hour, from), to);
+    counts.set(clamped, (counts.get(clamped) ?? 0) + 1);
+  }
+
+  const buckets: HourBucket[] = [];
+  for (let hour = from; hour <= to; hour += 1) {
+    buckets.push({ hour, count: counts.get(hour) ?? 0 });
+  }
+  return buckets;
+}
+
+function hourIn(isoTimestamp: string, timeZone: string): number | null {
+  const at = new Date(isoTimestamp);
+  if (Number.isNaN(at.getTime())) {
+    return null;
+  }
+
+  // `hourCycle: 'h23'` so midnight is 0 and not 24, which would fall outside
+  // every bucket and silently vanish from the chart.
+  const formatted = new Intl.DateTimeFormat('es-MX', {
+    hour: '2-digit',
+    hourCycle: 'h23',
+    timeZone,
+  }).format(at);
+
+  const hour = Number.parseInt(formatted, 10);
+  return Number.isFinite(hour) ? hour : null;
+}
+
+export interface BoardFilter {
+  readonly query: string;
+  readonly state: WorkdayState | 'all';
+  readonly department: string | 'all';
+}
+
+export function filterTeam(
+  team: readonly TeamMember[],
+  filter: BoardFilter,
+): TeamMember[] {
+  const needle = filter.query.trim().toLowerCase();
+
+  return team.filter((member) => {
+    if (filter.state !== 'all' && member.state !== filter.state) {
+      return false;
+    }
+    if (filter.department !== 'all' && (member.department ?? '') !== filter.department) {
+      return false;
+    }
+    if (needle === '') {
+      return true;
+    }
+    return `${member.employee_name} ${member.department ?? ''}`.toLowerCase().includes(needle);
+  });
+}
+
+/** Every department present today, so the filter offers only what exists. */
+export function departmentsOf(team: readonly TeamMember[]): string[] {
+  const names = new Set<string>();
+  for (const member of team) {
+    if (member.department !== null && member.department !== '') {
+      names.add(member.department);
+    }
+  }
+  return [...names].sort((a, b) => a.localeCompare(b, 'es-MX'));
+}
+
+export function countBySeverity(
+  alerts: readonly OpenAlert[],
+): Readonly<Record<AlertSeverity, number>> {
+  const counts = { high: 0, medium: 0, low: 0 };
+  for (const alert of alerts) {
+    counts[alert.severity] += 1;
+  }
+  return counts;
+}
+
+/**
+ * How many people this alert list is actually about. Somebody who collected
+ * three alerts today is one person to talk to, not three.
+ */
+export function employeesWithAlerts(alerts: readonly OpenAlert[]): number {
+  return new Set(alerts.map((alert) => alert.employee_id)).size;
+}

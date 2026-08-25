@@ -10,7 +10,7 @@ stand on its own.
 
 | | |
 |---|---|
-| **Status** | Backend SQL implemented · Employee PWA built · Alert dispatcher built |
+| **Status** | Backend SQL implemented · Employee PWA and HR board built · Alert dispatcher built |
 | **Migrations** | 11 applied · 2 written and pending application |
 | **Database** | Supabase `pimsa_ti` (`cyjpucvvekzfpvvonuld`), Postgres 17, us-east-1 |
 | **Plan** | Free — see [docs/free-plan.md](docs/free-plan.md) |
@@ -198,9 +198,10 @@ attendance/
 ├── tests/
 │   └── local-supabase.test.mjs  proves that workflow cannot reach production
 │
-├── web/                         the employee PWA: React, TypeScript, Vite
+├── web/                         the PWA: React, TypeScript, Vite
 │   ├── src/lib/                 the database contract, offline queue, sync
-│   ├── src/features/            login and the punch screen
+│   ├── src/features/punch/      the employee's own day
+│   ├── src/features/hr/         the team board managers and HR read
 │   └── vite.config.ts           build, service worker and installable manifest
 │
 ├── supabase/
@@ -403,7 +404,8 @@ short of where the client actually stands.
 | ✅ | Dispatcher Edge Function: drains the outbox over `config_correo` |
 | ✅ | Read API: the contract the PWA is written against |
 | ✅ | PWA: login, punch screen, offline queue, service worker |
-| ⬜ | HR dashboard and administration |
+| ✅ | HR board: live team status, open alerts, filters |
+| ⬜ | Administration: adjustments, schedules, alert rules |
 
 ### Known debt
 

@@ -53,3 +53,25 @@ export function isTransportFailure(error: FailedRequest): boolean {
   }
   return /failed to fetch|network|load failed|timeout|aborted/i.test(error.message);
 }
+
+/**
+ * The sentence to show when a read that refreshes itself fails.
+ *
+ * The punch screen re-throws what it does not recognise, and that is right
+ * there: a person is standing in front of it, waiting, and will see that
+ * nothing happened. A board left open on a wall has nobody waiting on it, so an
+ * unrecognised failure has to say something and be logged -- re-thrown into a
+ * detached promise it would become an unhandled rejection nobody ever reads,
+ * and the screen would go on showing yesterday as though it were current.
+ */
+export function describeReadFailure(error: unknown): string {
+  if (error instanceof NetworkUnavailableError) {
+    return 'Sin conexión. Se muestra la última lectura.';
+  }
+  if (error instanceof RpcError) {
+    return error.message;
+  }
+
+  console.error(error);
+  return 'No se pudo actualizar. Se muestra la última lectura.';
+}

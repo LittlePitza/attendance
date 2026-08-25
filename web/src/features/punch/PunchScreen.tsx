@@ -27,7 +27,14 @@ interface Notice {
  * day accepts nothing: it renders what it is offered and shows what comes back.
  * That is the reason the read API returns those actions at all.
  */
-export function PunchScreen({ onSignOut }: { onSignOut: () => void }): JSX.Element {
+export function PunchScreen({
+  onSignOut,
+  onOpenBoard = null,
+}: {
+  readonly onSignOut: () => void;
+  /** Present only for an account that also has a team to look at. */
+  readonly onOpenBoard?: (() => void) | null;
+}): JSX.Element {
   const online = useOnline();
   const { day, error, loading, refresh } = useMyDay();
 
@@ -85,9 +92,16 @@ export function PunchScreen({ onSignOut }: { onSignOut: () => void }): JSX.Eleme
           <h1 className="header__title">Checador</h1>
           {day !== null && <p className="header__date">{longDate(day)}</p>}
         </div>
-        <button className="button button--quiet" type="button" onClick={onSignOut}>
-          Salir
-        </button>
+        <span className="header__actions">
+          {onOpenBoard !== null && (
+            <button className="button button--quiet" type="button" onClick={onOpenBoard}>
+              Equipo
+            </button>
+          )}
+          <button className="button button--quiet" type="button" onClick={onSignOut}>
+            Salir
+          </button>
+        </span>
       </header>
 
       {!online && (
