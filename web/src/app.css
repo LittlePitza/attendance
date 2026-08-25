@@ -253,6 +253,11 @@ body {
   color: var(--warning);
 }
 
+.header__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .muted {
   color: var(--ink-muted);
   margin: 0;
