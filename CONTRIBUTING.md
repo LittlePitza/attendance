@@ -383,8 +383,10 @@ The PWA has its own lockfile and is installed separately:
 ```bash
 cd web
 npm ci
-npm test        # the queue, the sync pass, the punch screen
-npm run build   # strict type-check, then the bundle and service worker
+npm test          # the queue, the sync pass, the punch screen, the board
+npm run typecheck # strict type-check on its own, without bundling
+npm run build     # type-check, then the bundle and service worker
+npm run dev       # http://localhost:5173
 ```
 
 It needs no database to run its tests, and its configuration is the single
@@ -401,7 +403,32 @@ deno check alerts-notify/index.ts _shared/*_test.ts
 deno test
 ```
 
-`deno.lock` pins the dependency tree; CI runs exactly these four commands.
+`deno.lock` pins the dependency tree; CI runs exactly these four commands, and
+`deno task check` and `deno task test` are the same two spelled shorter.
+
+### Running one test
+
+Each toolchain names its subject differently, and none of them needs a watcher
+to be useful:
+
+```bash
+# The Node guards are one file, so narrow by test name.
+node --test --test-name-pattern "allowlist" tests/local-supabase.test.mjs
+
+# The client, by file or by name. `test:watch` leaves vitest running.
+cd web && npx vitest run src/features/hr/summary.test.ts
+cd web && npx vitest run -t "never goes back down"
+
+# The Edge Function, by file or by name.
+cd supabase/functions && deno test _shared/message_test.ts
+cd supabase/functions && deno test --filter "recipient"
+```
+
+**The SQL suites are the exception: there is no way to run one.**
+`npm run db:test` runs all three, because the wrapper takes a single known
+action and rejects every additional argument -- which is the same property that
+stops a suite being pointed at a different database by accident. Narrow inside
+the file instead.
 
 `npm test` verifies the assembler, command allowlist, local-only configuration,
 portable CLI launcher and documentation guardrails. `npm run db:verify` then
