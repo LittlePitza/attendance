@@ -21,6 +21,25 @@ export default defineConfig({
         // the thing that must not come from yesterday. Offline punching is
         // handled by the queue, not by pretending a request succeeded.
         navigateFallbackDenylist: [/^\/rest\//, /^\/auth\//],
+        // The one exception to "nothing external is cached": the font files.
+        // They never change behind their hashed URLs, and without this the
+        // board falls back to the system stack the moment it is offline.
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\//,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'google-fonts-stylesheets' },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\//,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-files',
+              expiration: { maxEntries: 12, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
       manifest: {
         name: 'Checador',

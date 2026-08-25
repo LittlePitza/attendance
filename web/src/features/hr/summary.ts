@@ -175,3 +175,38 @@ export function countBySeverity(
 export function employeesWithAlerts(alerts: readonly OpenAlert[]): number {
   return new Set(alerts.map((alert) => alert.employee_id)).size;
 }
+
+export interface ArrivalPoint {
+  readonly hour: number;
+  readonly arrived: number;
+}
+
+/**
+ * How many people had arrived by each hour.
+ *
+ * A running total, and the reason the chart is a line rather than the bars this
+ * is derived from: "people who have arrived" is a quantity that genuinely holds
+ * a value between one hour and the next, so joining the points describes
+ * something real. A line drawn between counts *within* each hour would slope
+ * through values that never existed.
+ */
+export function cumulativeArrivals(buckets: readonly HourBucket[]): ArrivalPoint[] {
+  let running = 0;
+  return buckets.map((bucket) => {
+    running += bucket.count;
+    return { hour: bucket.hour, arrived: running };
+  });
+}
+
+/**
+ * The same search box narrows the alert list too. Only the name is matched:
+ * the kind already has its own filter in the sidebar, and matching the detail
+ * sentence would make "min" pull up half the list.
+ */
+export function filterAlerts(alerts: readonly OpenAlert[], query: string): OpenAlert[] {
+  const needle = query.trim().toLowerCase();
+  if (needle === '') {
+    return [...alerts];
+  }
+  return alerts.filter((alert) => alert.employee_name.toLowerCase().includes(needle));
+}

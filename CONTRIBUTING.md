@@ -167,10 +167,24 @@ with in devtools changes what is offered, never what comes back.
 
 **No UI framework, and no icon package.** The whole client has four runtime
 dependencies. A component library would bring a build-time toolchain and dozens
-of transitive packages to style what is, in total, two screens; the icons are
-nine hand-drawn SVG paths for the same reason. Fonts stay on the system stack
-because a web font is a network dependency and this application is offline
-first.
+of transitive packages to style what is, in total, two screens; the icons are a
+dozen hand-drawn SVG paths for the same reason, and the one chart is forty
+lines of SVG geometry rather than a charting library.
+
+**The one external asset is the typeface.** Geist and Geist Mono are loaded
+from Google Fonts, which is the single exception to this application fetching
+nothing it did not ship. It earns it: the board is a dense grid of figures and
+names and the face carries most of that. The cost is paid down rather than
+ignored -- there is a real system fallback stack, `display=swap` means text
+renders immediately either way, and the service worker caches the files after
+the first visit so a later offline launch still gets them. Nothing depends on
+the font arriving.
+
+**The board is light and the punch screen is dark**, which is not an oversight
+either. They are different surfaces: a phone held for five seconds at the start
+of a shift, and a desktop grid left open all day. They share `lib/` and share
+nothing visual, which is why `hr.css` defines its own components instead of
+recolouring the ones in `app.css`.
 
 ## Language
 
