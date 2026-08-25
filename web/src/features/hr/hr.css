@@ -576,21 +576,51 @@ button.stat:hover {
 
 /* --------------------------------------------------------------- chart --- */
 
+/*
+ * Only the plot stretches. The labels, the grid and the end point sit in HTML
+ * beside it, placed by the same percentages the line is drawn with, so nothing
+ * that has to stay sharp is inside a viewport that is scaled twice as wide as
+ * it is tall.
+ */
 .chart {
-  position: relative;
-  width: 100%;
-  height: 13rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 12rem auto;
+  gap: 0 0.625rem;
+  margin: 0;
 }
 
-.chart svg {
+.chart__scale {
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  width: 1.75rem;
+}
+
+.chart__scale .chart__tick {
+  position: absolute;
+  inset-inline-end: 0;
+  top: var(--at);
+  transform: translateY(-50%);
+}
+
+.chart__plot {
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.chart__plot svg {
   display: block;
   width: 100%;
   height: 100%;
 }
 
-.chart__grid {
-  stroke: var(--line-soft);
-  stroke-width: 1;
+.chart__rule {
+  position: absolute;
+  inset-inline: 0;
+  top: var(--at);
+  border-top: 1px solid var(--line-soft);
 }
 
 .chart__line {
@@ -599,13 +629,11 @@ button.stat:hover {
   stroke-width: 1.75;
   stroke-linejoin: round;
   stroke-linecap: round;
-}
-
-/* Drawn on, left to right. The shape of the morning arrives rather than
- * appearing, which is the part worth watching. */
-.chart__line--draw {
-  stroke-dasharray: var(--len);
-  stroke-dashoffset: var(--len);
+  /* Drawn on, left to right, so the shape of the morning arrives rather than
+   * appearing. The dash length is in the stretched user space, so it only has
+   * to be generous rather than exact. */
+  stroke-dasharray: 300;
+  stroke-dashoffset: 300;
   animation: draw 900ms cubic-bezier(0.33, 1, 0.68, 1) forwards;
 }
 
@@ -614,13 +642,39 @@ button.stat:hover {
 }
 
 .chart__dot {
-  fill: var(--ink);
+  position: absolute;
+  inset-inline-end: 0;
+  top: var(--at);
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: var(--ink);
+  transform: translate(50%, -50%);
+}
+
+.chart__hours {
+  position: relative;
+  grid-column: 2;
+  grid-row: 2;
+  height: 1.25rem;
+}
+
+.chart__hours .chart__tick {
+  position: absolute;
+  top: 0.375rem;
+  left: var(--at);
+  transform: translateX(-50%);
 }
 
 .chart__tick {
-  fill: var(--ink-faint);
-  font-family: var(--mono);
-  font-size: 10px;
+  color: var(--ink-faint);
+  /* The sans, not the mono: these are two-digit labels that never need to line
+   * up in a column, and Geist Mono slashes its zero. */
+  font-family: var(--sans);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .legend {
@@ -1049,7 +1103,10 @@ button.stat:hover {
     transition-duration: 0.01ms !important;
   }
 
-  .chart__line--draw {
+  /* Killing the animation is not enough here: the line starts fully dashed
+   * out and the animation is what reveals it, so without this it would simply
+   * not be drawn. */
+  .chart__line {
     stroke-dasharray: none;
     stroke-dashoffset: 0;
   }

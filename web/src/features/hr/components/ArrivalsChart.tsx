@@ -10,17 +10,18 @@ import type { ArrivalPoint } from '../summary';
  * this is derived from.) The curve only ever climbs, so its shape is the shape
  * of the morning: steep where everyone arrived together, flat afterwards.
  *
- * Drawn by hand in SVG rather than with a charting library: it is one series
- * and about forty lines of geometry, against a dependency that would have to be
- * kept current and audited for the life of the project.
+ * **Only the plot is SVG.** The card is far wider than it is tall, so the
+ * drawing is stretched to fill it -- and anything inside a stretched viewport
+ * stretches with it. A stroke can opt out of that with `non-scaling-stroke`;
+ * text cannot, which is why axis labels drawn in SVG came out twice as wide as
+ * they should be and visibly soft. The labels, the grid and the end point are
+ * therefore HTML, positioned as percentages against the same scale the line
+ * uses, so they land exactly on it and stay crisp at any width.
  *
- * The figures are in the accessible label and in a `<title>` per point, so the
- * chart is readable without hovering and without seeing it at all.
+ * Drawn by hand rather than with a charting library: it is one series and about
+ * fifty lines of geometry, against a dependency to keep current and audit for
+ * the life of the project.
  */
-const WIDTH = 720;
-const HEIGHT = 208;
-const PAD = { top: 12, right: 8, bottom: 22, left: 28 };
-
 export function ArrivalsChart({
   points,
   total,
@@ -38,78 +39,91 @@ export function ArrivalsChart({
   // The axis is the size of the team, not the size of the series: a morning
   // where four of eighteen arrived should look like four of eighteen.
   const ceiling = Math.max(total, arrived, 1);
-  const plotWidth = WIDTH - PAD.left - PAD.right;
-  const plotHeight = HEIGHT - PAD.top - PAD.bottom;
 
-  const x = (index: number): number => PAD.left + (index / (points.length - 1)) * plotWidth;
-  const y = (value: number): number => PAD.top + plotHeight - (value / ceiling) * plotHeight;
+  // Both axes run 0..100, so the SVG stretches to whatever the card is and
+  // every HTML label can be placed by the same percentages.
+  const x = (index: number): number => (index / (points.length - 1)) * 100;
+  const y = (value: number): number => 100 - (value / ceiling) * 100;
 
-  const line = points.map((point, index) => `${x(index)},${y(point.arrived)}`).join(' ');
-  const area = `${PAD.left},${y(0)} ${line} ${x(points.length - 1)},${y(0)}`;
+  const line = points.map((point, index) => `${String(x(index))},${String(y(point.arrived))}`);
+  const area = ['0,100', ...line, '100,100'].join(' ');
 
-  // Close enough for the dash animation; it only has to exceed the true length.
-  const length = plotWidth + plotHeight;
-
-  const gridValues = [0, Math.round(ceiling / 2), ceiling];
-  const last = points.at(-1);
+  const ticks = [ceiling, Math.round(ceiling / 2), 0];
 
   return (
-    <div className="chart">
-      <svg
-        viewBox={`0 0 ${String(WIDTH)} ${String(HEIGHT)}`}
-        preserveAspectRatio="none"
-        role="img"
-        aria-label={`Llegadas acumuladas: ${String(arrived)} de ${String(total)} personas habían entrado al final del día.`}
-      >
-        <defs>
-          <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#18181a" stopOpacity="0.12" />
-            <stop offset="100%" stopColor="#18181a" stopOpacity="0" />
-          </linearGradient>
-        </defs>
+    <figure className="chart">
+      <div className="chart__scale" aria-hidden="true">
+        {ticks.map((value) => (
+          <span
+            className="chart__tick"
+            key={value}
+            style={{ '--at': `${String(y(value))}%` } as CSSProperties}
+          >
+            {value}
+          </span>
+        ))}
+      </div>
 
-        {gridValues.map((value) => (
-          <g key={value}>
-            <line
-              className="chart__grid"
-              x1={PAD.left}
-              x2={WIDTH - PAD.right}
-              y1={y(value)}
-              y2={y(value)}
-              vectorEffect="non-scaling-stroke"
-            />
-            <text className="chart__tick" x={0} y={y(value) + 3}>
-              {value}
-            </text>
-          </g>
+      <div className="chart__plot">
+        {ticks.map((value) => (
+          <span
+            className="chart__rule"
+            key={value}
+            style={{ '--at': `${String(y(value))}%` } as CSSProperties}
+            aria-hidden="true"
+          />
         ))}
 
-        <polygon className="chart__area" points={area} fill={`url(#${fillId})`} />
-        {/* The viewBox is stretched to the card's width, which would thin the
-          * stroke with it. This keeps the line one weight at any size. */}
-        <polyline
-          className="chart__line chart__line--draw"
-          points={line}
-          vectorEffect="non-scaling-stroke"
-          style={{ '--len': length } as CSSProperties}
+        <svg
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          role="img"
+          aria-label={`Llegadas acumuladas: ${String(arrived)} de ${String(total)} personas habían entrado.`}
+        >
+          <defs>
+            <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#18181a" stopOpacity="0.13" />
+              <stop offset="100%" stopColor="#18181a" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+
+          <polygon className="chart__area" points={area} fill={`url(#${fillId})`} />
+          <polyline
+            className="chart__line"
+            points={line.join(' ')}
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+
+        {/* HTML, because a circle in a stretched viewport is an ellipse. */}
+        <span
+          className="chart__dot"
+          style={{ '--at': `${String(y(arrived))}%` } as CSSProperties}
+          aria-hidden="true"
         />
+      </div>
 
-        {last !== undefined && (
-          <circle className="chart__dot" cx={x(points.length - 1)} cy={y(last.arrived)} r="3" />
+      <div className="chart__hours" aria-hidden="true">
+        {points.map((point, index) =>
+          // Every third hour, so the axis stays legible when the card is narrow.
+          point.hour % 3 === 0 ? (
+            <span
+              className="chart__tick"
+              key={point.hour}
+              style={{ '--at': `${String(x(index))}%` } as CSSProperties}
+            >
+              {String(point.hour).padStart(2, '0')}
+            </span>
+          ) : null,
         )}
+      </div>
 
-        {points.map((point, index) => (
-          <g key={point.hour}>
-            <title>{`${String(point.hour).padStart(2, '0')}:00 — ${String(point.arrived)} de ${String(total)}`}</title>
-            {/* Every third hour, so the axis stays legible when the card is narrow. */}
-            {point.hour % 3 === 0 && (
-              <text className="chart__tick" x={x(index)} y={HEIGHT - 6} textAnchor="middle">
-                {String(point.hour).padStart(2, '0')}
-              </text>
-            )}
-          </g>
-        ))}
-      </svg>
-    </div>
+      <figcaption className="sr-only">
+        {points
+          .filter((point) => point.hour % 3 === 0)
+          .map((point) => `${String(point.hour)}:00, ${String(point.arrived)}`)
+          .join('; ')}
+      </figcaption>
+    </figure>
   );
 }
