@@ -186,6 +186,26 @@ of a shift, and a desktop grid left open all day. They share `lib/` and share
 nothing visual, which is why `hr.css` defines its own components instead of
 recolouring the ones in `app.css`.
 
+**It is served from Vercel, and `web/vercel.json` is part of it.** Root
+Directory is `web`; everything else -- build command, output directory, cache
+headers, the content security policy -- is in that file rather than in a
+dashboard, so it is reviewed like the rest of the client. Two of its rules track
+what the code does and will go stale silently if they are not moved with it:
+`connect-src` names `https://*.supabase.co` and no `wss:`, and
+`Permissions-Policy` denies geolocation because nothing asks for it yet. Adding
+Realtime or collecting coordinates means editing that file in the same commit,
+or the browser refuses the request without the code ever hearing why.
+
+`connect-src` also names the two Google Fonts hosts, which reads as duplication
+of `style-src` and `font-src` and is not: the catch-all header rule matches
+`/sw.js` too, so the service worker is served this policy, and a worker's
+`connect-src` governs the fetches *it* makes -- including the runtime caching
+that keeps the typeface working offline. Removing them as redundant would leave
+the font loading on the first visit and failing once the service worker takes
+over. The decision is
+[ADR-0003](docs/decisions/ADR-0003-serve-the-pwa-from-vercel.md); the procedure
+is in [docs/runbook.md](docs/runbook.md).
+
 ## Language
 
 **Code, structure and documentation in English. User-facing text in Spanish.**

@@ -11,7 +11,7 @@ stand on its own.
 | | |
 |---|---|
 | **Status** | Backend SQL implemented · Employee PWA and HR board built · Alert dispatcher built |
-| **Migrations** | 11 applied · 2 written and pending application |
+| **Migrations** | 13 applied · none pending |
 | **Database** | Supabase `pimsa_ti` (`cyjpucvvekzfpvvonuld`), Postgres 17, us-east-1 |
 | **Plan** | Free — see [docs/free-plan.md](docs/free-plan.md) |
 | **People** | 31 employees · 15 departments |
@@ -43,7 +43,12 @@ Three layers with a boundary that is never crossed:
 | **Edge Functions** (Deno) | Talk to the outside world: email, user provisioning, exports | **Never** holds business rules |
 | **PWA** (React) | Interface | No logic: calls functions and renders data |
 
-There is no application server. A Python engine was ruled out because Supabase
+There is no application server. The PWA is static files, served from Vercel in
+the same account that already hosts `ti-hub` — Vercel runs no code for this
+project, so there is nowhere on that side for a rule to be written by accident.
+See [ADR-0003](docs/decisions/ADR-0003-serve-the-pwa-from-vercel.md).
+
+A Python engine was ruled out because Supabase
 Edge Functions only run TypeScript on Deno — and the result came out stronger,
 not weaker: a rule written in a `SECURITY DEFINER` function cannot be bypassed
 with a valid token or by hitting the REST API directly, because **the client
@@ -202,7 +207,8 @@ attendance/
 │   ├── src/lib/                 the database contract, offline queue, sync
 │   ├── src/features/punch/      the employee's own day
 │   ├── src/features/hr/         the team board managers and HR read
-│   └── vite.config.ts           build, service worker and installable manifest
+│   ├── vite.config.ts           build, service worker and installable manifest
+│   └── vercel.json              static hosting: cache headers and the CSP
 │
 ├── supabase/
 │   ├── config.toml              local CLI configuration
@@ -407,6 +413,7 @@ short of where the client actually stands.
 | ✅ | PWA: login, punch screen, offline queue, service worker |
 | ✅ | HR board: live team status, open alerts, filters |
 | ⬜ | Administration: adjustments, schedules, alert rules |
+| ⬜ | Pilot: the PWA deployed and installed on a real machine |
 
 ### Known debt
 
