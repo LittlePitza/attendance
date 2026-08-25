@@ -10,7 +10,7 @@ stand on its own.
 
 | | |
 |---|---|
-| **Status** | Backend SQL implemented · Local safety harness added · Client not started |
+| **Status** | Backend SQL implemented · Local safety harness added · Employee PWA built |
 | **Migrations** | 11 applied · 2 written and pending application |
 | **Database** | Supabase `pimsa_ti` (`cyjpucvvekzfpvvonuld`), Postgres 17, us-east-1 |
 | **Plan** | Free — see [docs/free-plan.md](docs/free-plan.md) |
@@ -198,6 +198,11 @@ attendance/
 ├── tests/
 │   └── local-supabase.test.mjs  proves that workflow cannot reach production
 │
+├── web/                         the employee PWA: React, TypeScript, Vite
+│   ├── src/lib/                 the database contract, offline queue, sync
+│   ├── src/features/            login and the punch screen
+│   └── vite.config.ts           build, service worker and installable manifest
+│
 ├── supabase/
 │   ├── config.toml              local CLI configuration
 │   ├── migrations/              13 migrations; the last two not applied yet
@@ -209,15 +214,14 @@ attendance/
     ├── workflows/
     │   ├── backup.yml           daily encrypted backup
     │   ├── keepalive.yml        prevents pausing for inactivity
-    │   └── ci.yml               disposable local database verification
+    │   └── ci.yml               local database verification and PWA build
     ├── dependabot.yml           keeps the pinned actions current
     └── PULL_REQUEST_TEMPLATE.md blast radius + migration checklist
 ```
 
-Still to be created, when the time comes: `web/` (the PWA) and
-`supabase/functions/` (the Edge Functions). There are no empty folders waiting
-for them because git does not track empty directories — they would vanish on
-clone.
+Still to be created, when the time comes: `supabase/functions/` (the Edge
+Functions). There is no empty folder waiting for them because git does not track
+empty directories — it would vanish on clone.
 
 ---
 
@@ -394,7 +398,7 @@ short of where the client actually stands.
 | ✅ | Alert evaluator, thresholds per department, notification outbox |
 | ⬜ | Dispatcher Edge Function: drains the outbox over `config_correo` |
 | ✅ | Read API: the contract the PWA is written against |
-| ⬜ | PWA: login, punch screen, offline queue, service worker |
+| ✅ | PWA: login, punch screen, offline queue, service worker |
 | ⬜ | HR dashboard and administration |
 
 ### Known debt
