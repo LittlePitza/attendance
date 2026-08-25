@@ -68,6 +68,38 @@ select e.nombre, e.correo, ur.role
 Against a different Supabase project, not production. A backup that has never
 been restored is a hypothesis.
 
+### 5. Create the Vercel project
+
+The PWA is served from Vercel; the reasoning is in
+[ADR-0003](decisions/ADR-0003-serve-the-pwa-from-vercel.md). This is done once,
+in the same account that already hosts `ti-hub`.
+
+Import the repository and set **one** project setting by hand -- everything else
+is read from `web/vercel.json`, which is committed:
+
+| Setting | Value |
+|---|---|
+| Root Directory | `web` |
+
+Then add the two environment variables, under
+`Settings → Environment Variables`:
+
+| Variable | Value | Environments |
+|---|---|---|
+| `VITE_SUPABASE_URL` | `https://cyjpucvvekzfpvvonuld.supabase.co` | **Production only** |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Dashboard → Project Settings → API Keys → publishable | **Production only** |
+
+**Production only is deliberate.** A preview deployment given these values is a
+working attendance application, on a public URL, pointing at real employee
+records. Without them the bundle builds and then refuses to start, which is
+`requireEnv()` doing its job. Never add the secret key or `SUPABASE_DB_URL`
+here: nothing in `web/` reads them and anything in this project reaches the
+browser.
+
+No redirect URL has to be allow-listed in Supabase Auth. Sign-in is email and
+password, `detectSessionInUrl` is off and there is no OAuth provider, so nothing
+ever comes back through a URL. That changes the day password recovery is added.
+
 ---
 
 ## Weekly check (5 minutes)
@@ -281,6 +313,43 @@ Blocks that device without closing the account. From then on `punch()` rejects
 it.
 
 ---
+
+## Deploying the PWA
+
+Pushing to `master` deploys it. There is nothing to run by hand, and no
+migration or Edge Function is involved -- the build produces static files and
+Vercel serves them.
+
+What is worth doing is checking that the deployment is the one the repository
+describes, because a `vercel.json` in the wrong place is ignored in silence
+rather than reported:
+
+```bash
+# The service worker must revalidate. A pinned sw.js is a client stuck on an
+# old build, which is exactly what registerType: 'autoUpdate' exists to prevent.
+curl -sI https://<domain>/sw.js | grep -i '^cache-control'
+# Expected: public, max-age=0, must-revalidate
+
+# The hashed bundle must not. If this says must-revalidate too, the headers
+# were not applied at all and every visit re-downloads the application.
+curl -sI https://<domain>/assets/index-*.js | grep -i '^cache-control'
+# Expected: public, max-age=31536000, immutable
+
+# The policy that keeps the page from talking to anything but Supabase.
+curl -sI https://<domain>/ | grep -i '^content-security-policy'
+```
+
+Then open the site and read the browser console once. A content security policy
+reports what it blocked and nothing else does: an empty console is the only
+evidence that the policy in `web/vercel.json` matches what the client actually
+requests. Do this after any change to the client's external dependencies, not
+only on the first deployment.
+
+**Installing it on an employee's machine** is what makes it a time clock rather
+than a tab. In Chrome or Edge, the install control appears at the right of the
+address bar, and the application then opens in its own window with its own icon.
+It needs HTTPS and a registered service worker, which is precisely what a
+deployment provides and `localhost` did not.
 
 ## Deploying the dispatcher
 
