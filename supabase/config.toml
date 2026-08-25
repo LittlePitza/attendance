@@ -57,3 +57,10 @@ required_characters = "abcdefghijklmnopqrstuvwxyz:ABCDEFGHIJKLMNOPQRSTUVWXYZ:012
 [edge_runtime]
 enabled = true
 policy = "oneshot"
+
+# The outbox dispatcher. `verify_jwt` turns away anything without a valid token
+# before the function runs, and the function itself then requires the service
+# role: every employee holds a valid token, and this one reads recipient
+# addresses and sends mail on the company's behalf.
+[functions.alerts-notify]
+verify_jwt = true

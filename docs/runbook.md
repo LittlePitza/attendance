@@ -240,6 +240,28 @@ select status, count(*), max(created_at) from attendance.notification_outbox
  group by status;
 ```
 
+`last_error` says which half it is. Two answers are common enough to name:
+
+- **`No recipients: ...`** -- no alert rule names an address and
+  `ALERTS_DEFAULT_RECIPIENTS` is unset. The dispatcher refuses to guess rather
+  than borrow the help desk's list. Fix it with a global rule, which is the
+  durable answer:
+
+  ```sql
+  insert into attendance.alert_rules (department_id, kind, recipients)
+  select null, kind, 'rh@empresa.com'
+    from unnest(array['late_entry', 'missing_entry', 'break_exceeded',
+                      'missing_exit', 'no_connection', 'review_offline',
+                      'clock_tampered']) as kind
+  on conflict do nothing;
+  ```
+
+  Rows already queued keep the null they were enqueued with, so set the function
+  secret too if you want the existing backlog delivered.
+
+- **`public.config_correo.metodo is '...'`** -- somebody switched the help desk's
+  mail method. The dispatcher implements `graph_app` only, on purpose.
+
 Nothing is lost while the dispatcher is down: the outbox keeps the work and
 retries with backoff. A row that reached `failed` stopped after eight attempts
 and needs a decision, not a retry loop.
@@ -256,6 +278,29 @@ Blocks that device without closing the account. From then on `punch()` rejects
 it.
 
 ---
+
+## Deploying the dispatcher
+
+`alerts-notify` is deployed on its own, and deploying it changes nothing until
+something calls it -- there is still no cron job that does.
+
+```bash
+supabase functions deploy alerts-notify --project-ref cyjpucvvekzfpvvonuld
+supabase secrets set ALERTS_DEFAULT_RECIPIENTS=rh@empresa.com --project-ref cyjpucvvekzfpvvonuld
+```
+
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_DB_URL` are injected by
+the platform and must not be set by hand.
+
+Draining the queue once, by hand, is the way to prove it works before anything
+is scheduled:
+
+```bash
+curl -X POST   -H "Authorization: Bearer $SERVICE_ROLE_KEY"   https://cyjpucvvekzfpvvonuld.supabase.co/functions/v1/alerts-notify
+```
+
+It answers `{"claimed":N,"sent":N,"failed":N}`. Anything that failed left its
+reason in `notification_outbox.last_error`.
 
 ## Applying a migration
 

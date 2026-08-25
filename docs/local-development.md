@@ -164,6 +164,32 @@ network is mocked, and the offline queue runs against `fake-indexeddb`. Pointing
 it at a real project is a manual step, and `npm run db:start` gives you a local
 one to point it at.
 
+## The Edge Function
+
+`supabase/functions/alerts-notify` is Deno, and needs neither Docker nor a
+database to verify:
+
+```bash
+cd supabase/functions
+deno fmt --check
+deno lint
+deno check alerts-notify/index.ts _shared/*_test.ts
+deno test
+```
+
+`deno.lock` pins the dependency tree, and CI runs exactly these four commands.
+The tests cover the two modules that are pure -- composing the message and
+resolving recipients -- which is deliberate: everything else in the function is
+a call to Postgres or to Graph, and a test that mocks both would only assert
+that the mocks were called.
+
+Running it locally against the local stack is possible with
+`supabase functions serve`, but it is rarely what you want: the outbox is empty
+on a fresh reset, and `public.config_correo` in the synthetic fixture holds no
+real mail credentials. Prove behaviour with the tests; prove delivery once, by
+hand, against the operating project as described in
+[runbook.md](runbook.md#deploying-the-dispatcher).
+
 ## Migration workflow
 
 Applied migrations are immutable. To change the database:
