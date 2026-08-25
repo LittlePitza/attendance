@@ -105,6 +105,42 @@ Two deliberate exceptions:
   the existing files is a separate, deliberate pass because it also means
   updating the `COMMENT ON` strings stored in the database.
 
+## Repository conventions
+
+These are settled decisions, not preferences to re-litigate per change.
+
+**Naming.** Repositories and their local folders are named in **English**, kept
+**general**, and do not carry the company name: `attendance`, not `checador` and
+not `pimsa-attendance`. The rule that applies to schemas, tables and files
+applies to the repository too. A name without the company also travels -- the
+same system could be lifted into another context without the name lying about
+it. The sibling repository `ti-hub` already set the terse, unprefixed
+precedent. When proposing a name, drop the company-prefixed variants rather than
+offering them.
+
+**Structure.** Lay the repository out the way a well-kept public project is laid
+out, even though this one is private: `README.md`, `CONTRIBUTING.md`, `LICENSE`,
+`SECURITY.md`, `.github/` templates, `.gitattributes`, `.editorconfig`. Apply
+that by default -- it is not an optional extra to be proposed and deferred. With
+judgement, though: add the files that earn their place and skip the ceremony
+that does not. A private internal system gets a proprietary `LICENSE`, not an
+open source one, and needs no code of conduct. `SECURITY.md` earns its place
+here because the database holds employee personal data. The pull request
+template carries this project's real checklist -- advisors, suites, blast radius
+-- not a generic one.
+
+**The record.** A commit message and a pull request body describe the change and
+why it was made. They do not describe the tooling that produced it: no
+attribution trailers, no generated-with footers. Which editor, assistant or
+generator someone used is not part of the project's record, and a repository
+that reads as a company work product should read like one throughout.
+
+By the same reasoning, **editor and assistant configuration stays out of the
+repository**. It belongs in the developer's global ignore file, not in
+`.gitignore` here, so that this project's ignore list stays about this project.
+Anything a given contributor's tooling needs locally can be a file that is
+ignored globally and never appears in `git status`.
+
 ## Rules that are never broken
 
 1. **Postgres decides, not the client.** Business rules live in
@@ -155,6 +191,47 @@ Two deliberate exceptions:
    to somebody already entitled to it.
 
 ## Code conventions
+
+### The standard, for SQL and TypeScript alike
+
+Every line here is expected to be well structured, solid, readable, secure and
+efficient, using current practice rather than habits carried over from older
+code. That is easy to say and easy to nod at, so here is what it means when
+something is being reviewed:
+
+- **Structure comes first.** One responsibility per function, per module, per
+  migration. The architectural boundary is the first structural rule: Postgres
+  decides, Edge Functions talk to the outside world, the PWA renders. Code that
+  makes a decision on the wrong side of that line is badly structured even if it
+  works.
+
+- **Readable means readable by someone who was not here.** Names say what the
+  thing is. Comments explain **why**, never what -- the code already says what.
+  If a construct takes a minute to decode, it is not clever, it is a cost paid
+  by everyone who reads it afterwards. Prefer the plain form.
+
+- **Solid means the failure path is written on purpose.** An error is handled,
+  reported or allowed to raise -- never swallowed. Nothing is left half-applied:
+  the batch that fails on one event, the notification that fails to send, the
+  punch that arrives twice, all have a defined outcome. If a case cannot happen,
+  say why in a comment instead of leaving the reader to guess.
+
+- **Secure means it does not depend on the caller behaving.** Least privilege by
+  default: a privilege not granted cannot be revoked by mistake. Never trust an
+  identifier the client supplied. Secrets do not enter the repository, the logs
+  or an error message.
+
+- **Efficient means the right shape, not micro-optimisation.** The cost that
+  matters is the one that grows: a query per row instead of a query per
+  statement, a policy re-evaluated per row, a table that nothing prunes. Fix
+  those. Do not contort readable code to save an allocation.
+
+- **Modern means the current standard, deliberately chosen.** Current language
+  features, TypeScript in strict mode, no pattern kept only because it is
+  familiar. And no dependency that has not earned its place -- every one is
+  something to keep current, audit and explain.
+
+### SQL specifics
 
 Following what `pimsa_ti` already used, so everything reads alike:
 
