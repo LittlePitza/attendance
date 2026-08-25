@@ -13,7 +13,7 @@
     }
   },
   "tasks": {
-    "check": "deno check alerts-notify/index.ts",
+    "check": "deno check alerts-notify/index.ts _shared/*_test.ts",
     "test": "deno test --quiet"
   }
 }
