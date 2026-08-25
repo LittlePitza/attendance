@@ -118,17 +118,80 @@ history at no cost.
 
 ### Restoring
 
+Read this before running it. The target is **never** this project: a restore
+replays a whole database over whatever is already there, and `pimsa_ti` is
+shared with the help desk in production. The variable below is deliberately not
+`SUPABASE_DB_URL` — that name already holds production in every shell where the
+backup has ever been debugged, and a procedure that works when the operator
+forgets to reassign it is a procedure aimed at production.
+
 ```bash
+# 1. Decrypt and unpack, in an empty directory.
+#    No --batch here: gpg then cannot prompt for the passphrase and dies with
+#    "Bad session key". To script it, use --batch --pinentry-mode loopback.
 gpg --decrypt --output backup.tar.gz backup-YYYYMMDD.tar.gz.gpg
-tar -xzf backup.tar.gz
-psql "$SUPABASE_DB_URL" -f roles.sql
-psql "$SUPABASE_DB_URL" -f schema.sql
-psql "$SUPABASE_DB_URL" -f data.sql
+tar -xzf backup.tar.gz          # -> roles.sql schema.sql data.sql
+                                #    migration_history_{schema,data}.sql
+                                #    MANIFEST.txt
+cat MANIFEST.txt                # which project, which CLI, which run
+
+# 2. Create a NEW, EMPTY Supabase project and take its SESSION-mode string
+#    (port 5432) from the dashboard's Connect button.
+RESTORE_TARGET_DB_URL='postgresql://postgres.NEWREF:PASSWORD@aws-N-us-east-1.pooler.supabase.com:5432/postgres'
+
+# 3. Install the extensions the schema expects from the NEW project's dashboard,
+#    under Database -> Extensions: pg_cron, pg_net, pgcrypto. Do it in the UI,
+#    not with CREATE EXTENSION: Supabase places these in particular schemas, and
+#    a bare CREATE EXTENSION puts them wherever search_path resolves — after
+#    which schema.sql's IF NOT EXISTS is a no-op and the objects land elsewhere.
+
+# 4. The restore. One transaction, abort on the first error, and a guard so a
+#    mistyped target cannot be this database. The guard wraps the command rather
+#    than calling `exit`, because `exit` in an interactive shell closes it.
+case "$RESTORE_TARGET_DB_URL" in
+  *cyjpucvvekzfpvvonuld*)
+    echo 'STOP: that is production pimsa_ti, shared with the help desk.' >&2 ;;
+  *)
+    psql "$RESTORE_TARGET_DB_URL" \
+      --single-transaction \
+      --variable ON_ERROR_STOP=1 \
+      --file roles.sql \
+      --file schema.sql \
+      --file migration_history_schema.sql \
+      --command 'SET session_replication_role = replica' \
+      --file data.sql \
+      --file migration_history_data.sql ;;
+esac
+
+# 5. Prove it landed. Record these numbers in the drill notes.
+psql "$RESTORE_TARGET_DB_URL" -At -c "
+  select 'employees ' || (select count(*) from public.empleados)
+      || ', punches '  || (select count(*) from attendance.punches)
+      || ', workdays ' || (select count(*) from attendance.workdays);"
+supabase migration list --db-url "$RESTORE_TARGET_DB_URL"   # expect 13 applied
 ```
 
-It is worth **doing one full restore drill** before the system goes live,
-against a different Supabase project. A backup that has never been restored is a
-hypothesis, not a backup.
+**Expect step 4 to abort the first time, and treat that as the procedure
+working.** `data.sql` carries the `auth`, `storage`, `cron` and `net` schemas,
+and a fresh project already has rows in some of them, so a duplicate-key abort
+is the normal first outcome. Read the error, add the offending table to the
+`--data-only` dump in `backup.yml` as `-x schema.table`, or truncate it on the
+empty target, and run again. `ON_ERROR_STOP=1` with `--single-transaction` is
+what makes this legible: without them psql ploughs through every error and exits
+0, and a half-applied restore reports success. Exit 0 is only meaningful because
+those two flags are there.
+
+Two consequences of restoring into a new project, both easy to discover too
+late. The project ref changes, so the PWA's `VITE_SUPABASE_*` variables, both
+workflow secrets and the dispatcher's configuration all point at the old
+database until they are updated. And `data.sql` contains `auth.users` — every
+account's email and password hash — which is why the archive is encrypted and
+why the unpacked directory in step 1 should not outlive the drill.
+
+**Do one full restore drill before the system goes live**, against a project
+created for it and deleted afterwards. A backup that has never been restored is
+a hypothesis, not a backup — and until the drill has run, every claim in this
+section is untested.
 
 ---
 

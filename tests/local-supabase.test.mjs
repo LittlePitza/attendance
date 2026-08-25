@@ -274,3 +274,29 @@ test('development documentation requires the guarded local workflow', async () =
   assert.match(readme, /docs\/local-development\.md/);
   assert.match(contributing, /docs\/local-development\.md/);
 });
+
+test('the documented restore cannot be aimed at production', async () => {
+  // free-plan.md is checked on its own rather than in the loop above: it
+  // documents an operations procedure, not the local development workflow, so
+  // it has no reason to mention `npm run db:verify`.
+  const freePlan = await readFile(path.join(repositoryRoot, 'docs', 'free-plan.md'), 'utf8');
+
+  // `SUPABASE_DB_URL` holds production in every shell where the backup has ever
+  // been debugged. A restore snippet that reads it is a restore aimed at the
+  // database the help desk runs on, and it works by accident when the operator
+  // forgets to reassign it. The procedure uses a name production never occupies.
+  assert.doesNotMatch(freePlan, /psql "\$SUPABASE_DB_URL"/);
+  assert.match(freePlan, /RESTORE_TARGET_DB_URL/);
+
+  // The guard has to name the production ref in order to refuse it.
+  assert.ok(
+    freePlan.includes(productionProjectRef),
+    'the restore procedure must name the production project ref in its refusal guard',
+  );
+
+  // Without both of these, psql ploughs through every error and exits 0, so a
+  // half-applied restore reports success -- which is the failure that makes a
+  // drill worthless.
+  assert.match(freePlan, /ON_ERROR_STOP=1/);
+  assert.match(freePlan, /--single-transaction/);
+});
