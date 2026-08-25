@@ -75,3 +75,33 @@ jobs:
         env:
           VITE_SUPABASE_URL: http://127.0.0.1:54321
           VITE_SUPABASE_PUBLISHABLE_KEY: ci-build-check
+
+  functions:
+    name: Edge Function format, lint, types and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: supabase/functions
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deno 2.x, matching the Edge Runtime. The dependency tree itself is
+      # pinned by deno.lock, which is what actually makes a run reproducible.
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check formatting
+        run: deno fmt --check
+
+      - name: Lint
+        run: deno lint
+
+      - name: Type-check
+        run: deno check alerts-notify/index.ts _shared/*_test.ts
+
+      - name: Run the unit tests
+        run: deno test

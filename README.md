@@ -10,7 +10,7 @@ stand on its own.
 
 | | |
 |---|---|
-| **Status** | Backend SQL implemented · Local safety harness added · Employee PWA built |
+| **Status** | Backend SQL implemented · Employee PWA built · Alert dispatcher built |
 | **Migrations** | 11 applied · 2 written and pending application |
 | **Database** | Supabase `pimsa_ti` (`cyjpucvvekzfpvvonuld`), Postgres 17, us-east-1 |
 | **Plan** | Free — see [docs/free-plan.md](docs/free-plan.md) |
@@ -205,6 +205,9 @@ attendance/
 │
 ├── supabase/
 │   ├── config.toml              local CLI configuration
+│   ├── functions/
+│   │   ├── alerts-notify/       drains the notification outbox over Graph
+│   │   └── _shared/             the SQL contract, message, recipients, mail
 │   ├── migrations/              13 migrations; the last two not applied yet
 │   └── tests/
 │       ├── sql/                 punch engine, alerts, read API, security
@@ -214,14 +217,15 @@ attendance/
     ├── workflows/
     │   ├── backup.yml           daily encrypted backup
     │   ├── keepalive.yml        prevents pausing for inactivity
-    │   └── ci.yml               local database verification and PWA build
+    │   └── ci.yml               database, PWA and Edge Function verification
     ├── dependabot.yml           keeps the pinned actions current
     └── PULL_REQUEST_TEMPLATE.md blast radius + migration checklist
 ```
 
-Still to be created, when the time comes: `supabase/functions/` (the Edge
-Functions). There is no empty folder waiting for them because git does not track
-empty directories — it would vanish on clone.
+Everything the architecture calls for now exists in the repository. What is
+missing is not code: the last two migrations have not been applied to the shared
+project, no employee has an account yet, and nothing schedules the dispatcher.
+See **Status and what is next**.
 
 ---
 
@@ -396,7 +400,7 @@ short of where the client actually stands.
 | ✅ | Free plan maintenance and backups |
 | ⬜ | User accounts and Auth hardening |
 | ✅ | Alert evaluator, thresholds per department, notification outbox |
-| ⬜ | Dispatcher Edge Function: drains the outbox over `config_correo` |
+| ✅ | Dispatcher Edge Function: drains the outbox over `config_correo` |
 | ✅ | Read API: the contract the PWA is written against |
 | ✅ | PWA: login, punch screen, offline queue, service worker |
 | ⬜ | HR dashboard and administration |
@@ -408,10 +412,21 @@ short of where the client actually stands.
   dismisses it. Closing the gap is one extra condition inside
   `evaluate_alerts()`, not a second evaluator — but until then the alert list
   has predictable noise in it, and that is worth knowing before HR sees it.
-- **The outbox has no dispatcher yet.** `evaluate_alerts()` queues
-  notifications and nothing drains them. Deliberate: scheduling a call to an
-  Edge Function that does not exist would fill `cron.job_run_details` with
-  failures. The queue keeps the work until the dispatcher lands.
+- **Nothing schedules the dispatcher yet.** `alerts-notify` exists and drains
+  the outbox when it is called, but no cron job calls it. Scheduling it means
+  storing the function URL and a key for `pg_net` to use, which is a decision
+  about where a credential lives -- so it is its own change, made deliberately,
+  not a line appended to this one.
+- **`alert_rules` is empty, so no rule names its recipients.** Every alert
+  therefore falls back to the dispatcher's `ALERTS_DEFAULT_RECIPIENTS` setting,
+  and with that unset the dispatcher refuses to guess and records the failure.
+  The durable fix is one global row in `alert_rules` carrying HR's address.
+- **Two applied migrations still describe the old fallback.** The `COMMENT ON`
+  for `alert_rules.recipients` says a null uses the defaults in
+  `config_correo`, which was written before anyone checked that the only list
+  there belongs to the help desk. The dispatcher deliberately does not borrow
+  it. Correcting the comment means a migration that touches the stored string,
+  so it waits for the next change in that area rather than a drive-by edit.
 - **SQL comments in the first 11 migrations are still in Spanish.** They date from an
   earlier language decision. Converting them is mechanical but also means
   updating the `COMMENT ON` strings already stored in the database, so it should

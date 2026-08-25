@@ -69,7 +69,7 @@ comment on column attendance.notification_outbox.idempotency_key is
 comment on column attendance.notification_outbox.payload is
   'Everything the dispatcher needs to compose the message, denormalised so it reads as it did when queued.';
 comment on column attendance.notification_outbox.recipients is
-  'Comma-separated addresses from the alert rule. Null means the dispatcher uses the defaults in public.config_correo.';
+  'Comma-separated addresses, copied from the alert rule when it was queued. Null means the dispatcher falls back to its ALERTS_DEFAULT_RECIPIENTS setting.';
 
 -- The dispatcher's working query: what is due, oldest first.
 create index if not exists notification_outbox_due_idx

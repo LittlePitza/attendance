@@ -82,6 +82,40 @@ on holiday collects a `missing_entry` every day, and HR dismisses them by hand.
 Adding one means an extra condition in the evaluator, not a second evaluator.
 
 
+## The dispatcher
+
+`supabase/functions/alerts-notify` drains `attendance.notification_outbox`. It
+is the only Edge Function, and it is the clearest example of the boundary: it
+owns **how** to talk to a mail provider and nothing else. When to retry, how
+long to wait, when to give up and whether an alert counts as notified are all
+decided in SQL, where they survive a deploy, a restart and a Free plan pause.
+
+- **It connects to Postgres directly**, with `SUPABASE_DB_URL`, rather than
+  through `supabase-js`. `attendance` is deliberately not an exposed schema, so
+  PostgREST cannot reach `claim_notifications()` at all -- and publishing
+  `public` wrappers would add two `SECURITY DEFINER` functions to the REST
+  surface that no browser would ever call.
+- **It loads the mail configuration before it claims anything.** Claiming first
+  would mark twenty rows `sending` and burn an attempt on each before
+  discovering that mail is misconfigured.
+- **It requires the service role**, compared as a digest. `verify_jwt` only
+  proves the caller has *a* valid token, and every employee has one; this
+  function reads recipient addresses and sends mail as the company.
+- **Delivery is at-least-once.** A run that dies between sending and reporting
+  leaves the row claimed, and fifteen minutes later another run may send a
+  second copy. A duplicate is visible and harmless; a missing notification is
+  neither.
+- **It never invents a recipient.** `alert_rules` is empty today, so every
+  notification falls back to `ALERTS_DEFAULT_RECIPIENTS`. With that unset it
+  reports the failure rather than borrowing the help desk's distribution list
+  from `config_correo`, which would mail attendance alerts to the IT ticket
+  queue -- wrong, and hard to notice.
+
+Only `graph_app` is implemented, because that is what `config_correo.metodo`
+says. The other two values the column allows are refused with an explanation
+rather than half-implemented; a quiet SMTP path nobody has ever run is worse
+than a loud stop.
+
 ## The client
 
 The employee PWA is in `web/`: React, TypeScript in strict mode, Vite, and a
@@ -322,6 +356,18 @@ It needs no database to run its tests, and its configuration is the single
 `.env` at the repository root -- Vite is pointed there with `envDir` so there is
 never a second env file inside `web/` to get out of step.
 
+The Edge Function is Deno, and needs neither:
+
+```bash
+cd supabase/functions
+deno fmt --check
+deno lint
+deno check alerts-notify/index.ts _shared/*_test.ts
+deno test
+```
+
+`deno.lock` pins the dependency tree; CI runs exactly these four commands.
+
 `npm test` verifies the assembler, command allowlist, local-only configuration,
 portable CLI launcher and documentation guardrails. `npm run db:verify` then
 builds `.local/supabase`, starts local Postgres, resets it from all migrations
@@ -416,5 +462,9 @@ select tablename, policyname from pg_policies
   `(SELECT internal.caller_role() AS rol_actual)`: Postgres froze the output
   alias when the policy was created. The call resolves correctly and behavior is
   identical. Clean it up next time those policies need touching, not before.
+- **Nothing schedules the dispatcher.** `alerts-notify` drains the outbox when
+  it is called and no cron job calls it. Scheduling means deciding where the
+  function URL and its key live for `pg_net` to use, which is a credential
+  decision and so its own change.
 - **The 31 user accounts do not exist yet.** The agreement was to create 2 or 3
   test accounts first. `public.empleados.auth_user_id` is at zero.
