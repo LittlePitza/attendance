@@ -104,6 +104,15 @@ build and a JSON file -- but it is not zero.
   everything under `/assets/` and the hashed `workbox-*.js` are `immutable`. A
   cached service worker that never revalidates is a client pinned to an old
   build, which for `registerType: 'autoUpdate'` would defeat the whole point.
+- **The manifest declares `id: '/'`, and it is now load-bearing.** Installing
+  the application on a Windows machine and making it start at sign-in are two
+  different Edge policies, and the second one -- `WebAppSettings` -- is keyed by
+  **manifest ID**, not by URL. Left undeclared, that ID is derived from
+  `start_url`, so the app's identity to the operating system would be a side
+  effect of a field somebody could reasonably change. Declaring it resolves to
+  the same value the derivation already produced, which is why it could be
+  pinned now at no cost; changing it after machines have installed the app is a
+  different application to Windows, not an update to this one.
 - **A catch-all rewrite sends unmatched paths to `index.html`.** The application
   has no router and only one route, so this is not about deep links: it is so
   that an unmatched path behaves the same online as it does offline, where the

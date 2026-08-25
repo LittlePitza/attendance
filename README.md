@@ -413,7 +413,7 @@ short of where the client actually stands.
 | ✅ | PWA: login, punch screen, offline queue, service worker |
 | ✅ | HR board: live team status, open alerts, filters |
 | ⬜ | Administration: adjustments, schedules, alert rules |
-| ⬜ | Pilot: the PWA deployed and installed on a real machine |
+| ⬜ | Pilot: the PWA deployed, installed on a machine and starting at sign-in |
 
 ### Known debt
 
