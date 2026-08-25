@@ -209,7 +209,7 @@ attendance/
 │   ├── functions/
 │   │   ├── alerts-notify/       drains the notification outbox over Graph
 │   │   └── _shared/             the SQL contract, message, recipients, mail
-│   ├── migrations/              13 migrations; the last two not applied yet
+│   ├── migrations/              13 migrations, all applied
 │   └── tests/
 │       ├── sql/                 punch engine, alerts, read API, security
 │       └── fixtures/            synthetic baseline and seed; never real data
@@ -223,10 +223,11 @@ attendance/
     └── PULL_REQUEST_TEMPLATE.md blast radius + migration checklist
 ```
 
-Everything the architecture calls for now exists in the repository. What is
-missing is not code: the last two migrations have not been applied to the shared
-project, no employee has an account yet, and nothing schedules the dispatcher.
-See **Status and what is next**.
+Everything the architecture calls for now exists in the repository, and the
+whole migration history is applied to the shared project. What is missing is
+still not code: no employee has an account yet, so nothing can sign in and the
+evaluator has nobody to evaluate, and nothing schedules the dispatcher. See
+**Status and what is next**.
 
 ---
 

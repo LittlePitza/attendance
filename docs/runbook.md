@@ -132,9 +132,12 @@ And one check the linter does **not** do, because it only verifies that RLS is
 switched on, not that the policies are restrictive:
 
 ```sql
-select tablename, policyname from pg_policies
+select tablename, policyname, cmd from pg_policies
  where schemaname = 'public' and permissive = 'PERMISSIVE'
-   and (qual = 'true' or qual is null)
+   -- An INSERT policy restricts through with_check and always has a null qual,
+   -- so testing qual alone reports every one of them as wide open. Falling back
+   -- to with_check reads whichever clause actually governs the command.
+   and coalesce(qual, with_check, 'true') = 'true'
    and policyname <> 'departments_read';
 -- Expected: 0 rows. departments_read is open on purpose.
 ```
