@@ -17,6 +17,9 @@ dist/
 dist-ssr/
 *.local
 
+# Deployment tooling: local project link, never committed
+.vercel/
+
 # Editors and OS
 .vscode/*
 !.vscode/settings.json

@@ -42,12 +42,26 @@ export default defineConfig({
         ],
       },
       manifest: {
+        // The identity the operating system files this application under.
+        // Without it the browser derives one from `start_url`, which means the
+        // identity is a side effect of a field that may reasonably change --
+        // and the Windows policy that makes the app start at sign-in is keyed
+        // by exactly this value. `'/'` resolves to what the derived id already
+        // is, so declaring it now costs nothing and pins it before any machine
+        // has installed the app. Changing it afterwards is a different
+        // application to Windows, not an update to this one.
+        id: '/',
         name: 'Checador',
         short_name: 'Checador',
         description: 'Registro de entradas, pausas y salidas para trabajo en casa.',
         lang: 'es-MX',
         start_url: '/',
         scope: '/',
+        // Launched at sign-in and then launched again from the desktop icon,
+        // the employee should arrive at the window that is already open --
+        // with whatever is sitting in the offline queue -- rather than at a
+        // second copy of it.
+        launch_handler: { client_mode: 'focus-existing' },
         display: 'standalone',
         orientation: 'portrait',
         background_color: '#0f172a',

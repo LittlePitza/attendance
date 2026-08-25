@@ -68,6 +68,38 @@ select e.nombre, e.correo, ur.role
 Against a different Supabase project, not production. A backup that has never
 been restored is a hypothesis.
 
+### 5. Create the Vercel project
+
+The PWA is served from Vercel; the reasoning is in
+[ADR-0003](decisions/ADR-0003-serve-the-pwa-from-vercel.md). This is done once,
+in the same account that already hosts `ti-hub`.
+
+Import the repository and set **one** project setting by hand -- everything else
+is read from `web/vercel.json`, which is committed:
+
+| Setting | Value |
+|---|---|
+| Root Directory | `web` |
+
+Then add the two environment variables, under
+`Settings → Environment Variables`:
+
+| Variable | Value | Environments |
+|---|---|---|
+| `VITE_SUPABASE_URL` | `https://cyjpucvvekzfpvvonuld.supabase.co` | **Production only** |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Dashboard → Project Settings → API Keys → publishable | **Production only** |
+
+**Production only is deliberate.** A preview deployment given these values is a
+working attendance application, on a public URL, pointing at real employee
+records. Without them the bundle builds and then refuses to start, which is
+`requireEnv()` doing its job. Never add the secret key or `SUPABASE_DB_URL`
+here: nothing in `web/` reads them and anything in this project reaches the
+browser.
+
+No redirect URL has to be allow-listed in Supabase Auth. Sign-in is email and
+password, `detectSessionInUrl` is off and there is no OAuth provider, so nothing
+ever comes back through a URL. That changes the day password recovery is added.
+
 ---
 
 ## Weekly check (5 minutes)
@@ -281,6 +313,88 @@ Blocks that device without closing the account. From then on `punch()` rejects
 it.
 
 ---
+
+## Deploying the PWA
+
+Pushing to `master` deploys it. There is nothing to run by hand, and no
+migration or Edge Function is involved -- the build produces static files and
+Vercel serves them.
+
+What is worth doing is checking that the deployment is the one the repository
+describes, because a `vercel.json` in the wrong place is ignored in silence
+rather than reported:
+
+```bash
+# The service worker must revalidate. A pinned sw.js is a client stuck on an
+# old build, which is exactly what registerType: 'autoUpdate' exists to prevent.
+curl -sI https://<domain>/sw.js | grep -i '^cache-control'
+# Expected: public, max-age=0, must-revalidate
+
+# The hashed bundle must not. If this says must-revalidate too, the headers
+# were not applied at all and every visit re-downloads the application.
+curl -sI https://<domain>/assets/index-*.js | grep -i '^cache-control'
+# Expected: public, max-age=31536000, immutable
+
+# The policy that keeps the page from talking to anything but Supabase.
+curl -sI https://<domain>/ | grep -i '^content-security-policy'
+```
+
+Then open the site and read the browser console once. A content security policy
+reports what it blocked and nothing else does: an empty console is the only
+evidence that the policy in `web/vercel.json` matches what the client actually
+requests. Do this after any change to the client's external dependencies, not
+only on the first deployment.
+
+### Installing it on an employee's machine
+
+Installing is what makes it a time clock rather than a tab: it gets a Start
+Menu entry, its own icon, its own window with no address bar, and an entry under
+*Apps & features* to uninstall it. It needs HTTPS and a registered service
+worker, which is what a deployment provides and `localhost` did not.
+
+**By hand, which is what the pilot needs.** On the two or three machines in the
+pilot, in Edge or Chrome:
+
+1. Open the site and use the install control at the right of the address bar.
+2. Open `edge://apps` (or `chrome://apps`), right-click **Checador**, and turn
+   on **Start app when you sign in**.
+
+That second step is what puts a shortcut in the user's Startup folder, so the
+punch screen is on screen before the employee has opened anything.
+
+**By policy, which is what 31 machines need.** Two separate Edge policies, both
+under `HKLM\SOFTWARE\Policies\Microsoft\Edge` or the equivalent Intune
+configuration profile. IT already manages these machines, so this is their
+lever, not ours.
+
+`WebAppInstallForceList` installs it and stops it from being uninstalled:
+
+```json
+[{ "url": "https://<domain>/", "default_launch_container": "window", "create_desktop_shortcut": true }]
+```
+
+`WebAppSettings` makes it start at sign-in. **It is keyed by manifest ID, not by
+URL**, which is why `web/vite.config.ts` declares `id: '/'` — the manifest ID is
+that resolved against the origin:
+
+```json
+[{ "manifest_id": "https://<domain>/", "run_on_os_login": "run_windowed" }]
+```
+
+`run_windowed` starts it and takes the choice away from the employee; `allowed`
+leaves the toggle in their hands and starts nothing on its own. Microsoft
+documents that the default policy configuration accepts only `allowed` and
+`blocked`, so confirm `run_windowed` applies on one machine before rolling it
+out — see
+[WebAppSettings](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-browser-policies/webappsettings).
+
+**What starting at sign-in does and does not mean.** It puts the screen in front
+of the employee. It does not punch anybody in: `punch()` still needs the button
+pressed, the timestamp still comes from the server, and a machine that is turned
+on is not evidence that somebody started working. If attendance should ever
+follow the machine rather than the person, that is a decision about what the
+company is measuring — and it belongs in `internal.record_punch()`, not in a
+launcher.
 
 ## Deploying the dispatcher
 
