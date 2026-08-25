@@ -9,6 +9,17 @@ const teamDay = vi.fn<() => Promise<TeamMember[]>>();
 const openAlerts = vi.fn<() => Promise<OpenAlert[]>>();
 
 /**
+ * Today, in the zone the board itself reads dates in.
+ *
+ * Not a fixed date. `team_day()` answers for whatever today is, and the header
+ * compares that against now -- so a hardcoded fixture claims to be showing an
+ * older day and the controls correctly refuse to step forward. `sv-SE` formats
+ * as ISO, and no zone argument means the runner's own, which is exactly the one
+ * the component resolves.
+ */
+const TODAY = new Intl.DateTimeFormat('sv-SE').format(new Date());
+
+/**
  * Only the network is faked. The hooks, the filtering, the aggregation and the
  * rendering all run for real, so what is under test is the board somebody
  * actually reads rather than a pile of mocks agreeing with each other.
@@ -25,7 +36,7 @@ function member(over: Partial<TeamMember> & { employee_id: string }): TeamMember
   return {
     employee_name: 'Ana Ruiz',
     department: 'Sistemas',
-    work_date: '2026-08-24',
+    work_date: TODAY,
     state: 'working',
     opened_at: '2026-08-24T15:02:00Z',
     closed_at: null,
@@ -119,7 +130,7 @@ describe('HrDashboard', () => {
         id: 'a1',
         employee_id: '3',
         employee_name: 'Carla Sosa',
-        alert_date: '2026-08-24',
+        alert_date: TODAY,
         kind: 'missing_entry',
         severity: 'high',
         state: 'open',
@@ -148,7 +159,7 @@ describe('HrDashboard', () => {
         id: 'a1',
         employee_id: '1',
         employee_name: 'Ana Ruiz',
-        alert_date: '2026-08-24',
+        alert_date: TODAY,
         kind: 'late_entry',
         severity: 'medium',
         state: 'open',
@@ -199,5 +210,19 @@ describe('HrDashboard', () => {
 
     expect(screen.getByRole('button', { name: 'Día siguiente' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Hoy' })).toBeDisabled();
+  });
+
+  it('opens the day before, and offers the way back', async () => {
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Día anterior' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Hoy' })).not.toBeDisabled(),
+    );
+    expect(screen.getByRole('button', { name: 'Día siguiente' })).not.toBeDisabled();
+    // Yesterday is done with, so the counter says so rather than "todavía".
+    expect(screen.getByText('No marcaron')).toBeInTheDocument();
   });
 });
