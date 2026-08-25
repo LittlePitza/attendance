@@ -206,6 +206,12 @@ over. The decision is
 [ADR-0003](docs/decisions/ADR-0003-serve-the-pwa-from-vercel.md); the procedure
 is in [docs/runbook.md](docs/runbook.md).
 
+**`manifest.id` in `vite.config.ts` is not cosmetic and does not change.** It is
+the name Windows files the installed application under, and the Edge policy that
+makes it start at sign-in is keyed by it rather than by the URL. A new value is
+a new application to the operating system: the old one stays installed, the
+policy matches nothing, and nobody is told.
+
 ## Language
 
 **Code, structure and documentation in English. User-facing text in Spanish.**
