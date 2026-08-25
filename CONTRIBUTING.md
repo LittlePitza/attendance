@@ -82,6 +82,41 @@ on holiday collects a `missing_entry` every day, and HR dismisses them by hand.
 Adding one means an extra condition in the evaluator, not a second evaluator.
 
 
+## The client
+
+The employee PWA is in `web/`: React, TypeScript in strict mode, Vite, and a
+service worker from `vite-plugin-pwa`. It is the third layer of the boundary,
+and the thinnest one -- **it holds no rule about attendance at all**.
+
+Where that gets decided in practice:
+
+- **The buttons come from the server.** `my_day()` returns `next_actions`, and
+  the screen renders exactly those. It does not know that a break follows an
+  entry or that a finished day accepts nothing. Adding a fifth punch kind is a
+  migration and a label, never a condition in a component.
+- **Nothing is optimistic.** After a punch the screen asks `my_day()` again
+  instead of predicting the new state. Predicting it would put the state machine
+  in two places, and the browser's copy would be the wrong one when they
+  disagree.
+- **Refused is not the same as unsent.** `isTransportFailure()` in
+  `web/src/lib/errors.ts` is the whole of that decision. A refusal carries a
+  SQLSTATE, is final, and is shown to the employee in the Spanish the engine
+  wrote. A request that never arrived decided nothing, so the punch goes to the
+  IndexedDB queue. Backwards in one direction it loses a legitimate punch;
+  backwards in the other it retries an illegal one on every reconnection
+  forever.
+- **The idempotency key is minted before the attempt**, not when it is sent. A
+  reply lost in transit is then retried onto the same key, and the database
+  returns the original punch instead of making a second one.
+- **The queue drains on reconnection, not on a timer.** An event the server
+  answered for is deleted from the queue even when the answer was a refusal:
+  keeping it would mean retrying it for the life of the installation. It is
+  surfaced on screen instead, and held there until dismissed.
+
+`web/src/lib/types.ts` is the client's copy of the SQL contract, written by hand
+rather than generated. It is small, and a generated file would hide the moment
+the contract moved.
+
 ## Language
 
 **Code, structure and documentation in English. User-facing text in Spanish.**
@@ -273,6 +308,19 @@ npm test
 npm run db:verify
 npm run db:stop
 ```
+
+The PWA has its own lockfile and is installed separately:
+
+```bash
+cd web
+npm ci
+npm test        # the queue, the sync pass, the punch screen
+npm run build   # strict type-check, then the bundle and service worker
+```
+
+It needs no database to run its tests, and its configuration is the single
+`.env` at the repository root -- Vite is pointed there with `envDir` so there is
+never a second env file inside `web/` to get out of step.
 
 `npm test` verifies the assembler, command allowlist, local-only configuration,
 portable CLI launcher and documentation guardrails. `npm run db:verify` then

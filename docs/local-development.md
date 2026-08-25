@@ -129,12 +129,40 @@ The harness is designed around mechanical controls rather than operator memory:
   Windows and Linux behavior.
 - Docker is checked before Supabase starts; a missing daemon produces an explicit
   `No remote fallback is allowed` error.
-- `.env.example` points the future PWA to `http://127.0.0.1:54321`.
+- `.env.example` points the PWA at `http://127.0.0.1:54321`.
 - Pull-request CI receives no production database secret and runs the same local
   verifier.
 
 The `ROLLBACK` in the engine test is defense in depth. It does not make a live
 or shared database an acceptable test target.
+
+## The PWA
+
+The employee client lives in `web/` and has its own lockfile, so it is installed
+separately from the database tooling:
+
+```bash
+cd web
+npm ci
+npm test        # unit tests: the queue, the sync pass, the punch screen
+npm run build   # type-check in strict mode, then bundle with the service worker
+npm run dev     # http://localhost:5173
+```
+
+Configuration comes from a single `.env` at the repository root -- copy
+`.env.example` beside it and fill it in. Vite is pointed there with `envDir`
+rather than keeping a second env file inside `web/`, so there is one place to
+look and one place to get wrong.
+
+Only variables prefixed with `VITE_` reach the browser, and only the publishable
+key ever should. It grants nothing on its own: every table is behind RLS and
+every write goes through a `SECURITY DEFINER` function that derives the employee
+from the token.
+
+The client needs no database to run its tests -- everything that would touch the
+network is mocked, and the offline queue runs against `fake-indexeddb`. Pointing
+it at a real project is a manual step, and `npm run db:start` gives you a local
+one to point it at.
 
 ## Migration workflow
 

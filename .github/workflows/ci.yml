@@ -42,3 +42,36 @@ jobs:
       - name: Stop the local database
         if: always()
         run: npm run db:stop
+
+  web:
+    name: PWA type-check, tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install the pinned dependencies
+        run: npm ci
+
+      - name: Run the unit tests
+        run: npm test
+
+      # Placeholders, and that is the whole point: this job proves the bundle
+      # compiles, never that it can reach a project. The real values come from
+      # the deployment environment, and no credential belongs in CI.
+      - name: Type-check and build the production bundle
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: http://127.0.0.1:54321
+          VITE_SUPABASE_PUBLISHABLE_KEY: ci-build-check

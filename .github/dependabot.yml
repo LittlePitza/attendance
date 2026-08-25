@@ -1,10 +1,29 @@
-# Keeps the GitHub Actions pinned in .github/workflows up to date. Those
-# workflows hold the database connection string and the backup passphrase, so a
-# compromised or abandoned action is a direct path to both.
+# Every dependency this repository pins, kept current on a monthly cadence.
 version: 2
 updates:
+  # The workflows hold the database connection string and the backup passphrase,
+  # so a compromised or abandoned action is a direct path to both.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+
+  # The PWA's dependency tree is shipped to the browser, so a vulnerable package
+  # is served to every employee. Routine upgrades arrive as one pull request per
+  # month; anything that needs a code change arrives on its own.
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      routine:
+        update-types: [minor, patch]
+
+  # The database tooling: the pinned Supabase CLI, and nothing else.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
