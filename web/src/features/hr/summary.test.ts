@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { OpenAlert, TeamMember, WorkdayState } from '../../lib/types';
 import {
   countBySeverity,
+  cumulativeArrivals,
   departmentsOf,
   employeesWithAlerts,
   entryHistogram,
+  filterAlerts,
   filterTeam,
   summarise,
 } from './summary';
@@ -206,5 +208,72 @@ describe('alert counting', () => {
         alert({ id: '3', employee_id: 'e2' }),
       ]),
     ).toBe(2);
+  });
+});
+
+describe('cumulativeArrivals', () => {
+  it('runs the total forward and never goes back down', () => {
+    const points = cumulativeArrivals([
+      { hour: 8, count: 1 },
+      { hour: 9, count: 4 },
+      { hour: 10, count: 0 },
+      { hour: 11, count: 2 },
+    ]);
+
+    expect(points).toEqual([
+      { hour: 8, arrived: 1 },
+      { hour: 9, arrived: 5 },
+      // An hour where nobody arrived holds the total rather than dropping it:
+      // people who arrived at nine have not un-arrived at ten.
+      { hour: 10, arrived: 5 },
+      { hour: 11, arrived: 7 },
+    ]);
+  });
+
+  it('stays flat at zero when nobody has arrived', () => {
+    const points = cumulativeArrivals([
+      { hour: 8, count: 0 },
+      { hour: 9, count: 0 },
+    ]);
+    expect(points.every((point) => point.arrived === 0)).toBe(true);
+  });
+});
+
+describe('filterAlerts', () => {
+  const alerts: OpenAlert[] = [
+    {
+      id: '1',
+      employee_id: 'e1',
+      employee_name: 'Ana Ruiz',
+      alert_date: '2026-08-24',
+      kind: 'late_entry',
+      severity: 'medium',
+      state: 'open',
+      details: { minutes_late: 18 },
+      created_at: '2026-08-24T15:00:00Z',
+      notified_at: null,
+    },
+    {
+      id: '2',
+      employee_id: 'e2',
+      employee_name: 'Beto Lara',
+      alert_date: '2026-08-24',
+      kind: 'missing_entry',
+      severity: 'high',
+      state: 'open',
+      details: { minutes_overdue: 42 },
+      created_at: '2026-08-24T15:00:00Z',
+      notified_at: null,
+    },
+  ];
+
+  it('matches the person, not the description', () => {
+    expect(filterAlerts(alerts, ' beto ').map((a) => a.id)).toEqual(['2']);
+    // "min" appears in every detail sentence; matching it would filter nothing.
+    expect(filterAlerts(alerts, 'min')).toHaveLength(0);
+  });
+
+  it('returns everything when nothing was typed', () => {
+    expect(filterAlerts(alerts, '   ')).toHaveLength(2);
   });
 });

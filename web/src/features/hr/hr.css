@@ -1,671 +1,412 @@
 /*
  * The board's own stylesheet.
  *
- * `app.css` dresses four screens of markup for a phone held at the start of a
- * shift: one narrow column, large targets, nothing clever. This is the opposite
- * brief -- a dense grid read on a desk, often left open all day -- so it gets
- * its own file rather than doubling the length of that one. It extends those
- * tokens and never redefines them: `.card`, `.button`, `.notice` and `.tag` are
- * the same components on both screens, and they should stay that way.
+ * `app.css` dresses a phone held at the start of a shift: one narrow dark
+ * column, thumb-sized targets. This is the opposite brief -- a dense grid read
+ * on a desk, often left open all day -- so it carries its own ground, its own
+ * type and its own components rather than bending those.
  *
- * Typography stays on the system stack. The dual sans/mono pairing this design
- * calls for is real and useful -- figures line up in a monospace column and
- * stop jittering as they count -- but a web font is a network dependency, and
- * this is an offline-first application. `font-variant-numeric: tabular-nums`
- * buys the alignment that actually mattered, for nothing.
+ * The whole palette is neutral. Colour appears only where it encodes state: a
+ * green pill means somebody is working, a red stripe means an alert is severe.
+ * Nothing is tinted for decoration, which is what keeps the two or three places
+ * that *are* coloured readable as information rather than as styling.
+ *
+ * The board deliberately does not reuse `app.css` components. `.card`,
+ * `.button` and `.tag` there are dark-ground and thumb-sized; borrowing the
+ * names on a light ground would make one class mean two different things.
  */
 
 .hr {
-  /* Dense scale. A shift board is read by scanning, and every extra pixel of
-   * padding is a row that fell off the bottom of the screen. */
-  --hr-gap: 0.875rem;
-  --hr-pad: 1.125rem;
+  /* ---------------------------------------------------------------- ink --- */
+  --paper: #f6f5f3;
+  --card: #ffffff;
+  --sunken: #faf9f8;
+  --line: #e7e5e1;
+  --line-soft: #efedea;
+  --edge: #dcd9d4;
 
-  --tone-working: #4ade80;
-  --tone-break: #fbbf24;
-  --tone-pending: #94a3b8;
-  --tone-done: #38bdf8;
-  --tone-alert: #f87171;
+  --ink: #18181a;
+  --ink-soft: #6e6e73;
+  --ink-faint: #a1a1a6;
 
-  --surface-sunken: #0b1220;
-  --surface-hover: #24324a;
+  --solid: #18181a;
+  --solid-ink: #ffffff;
 
-  --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Segoe UI Mono', 'Roboto Mono', monospace;
+  /* Semantic only. These four pairs are the entire colour budget. */
+  --good: #15803d;
+  --good-soft: #dcfce7;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --bad: #b91c1c;
+  --bad-soft: #fee2e2;
+  --info: #1d4ed8;
+  --info-soft: #dbeafe;
 
-  display: flex;
-  flex-direction: column;
-  gap: var(--hr-gap);
-  margin-inline: auto;
-  max-width: 90rem;
-  padding: 0 var(--hr-pad) calc(2rem + env(safe-area-inset-bottom));
+  --radius: 12px;
+  --radius-sm: 9px;
+  --shadow: 0 1px 2px rgb(24 24 26 / 5%);
+  --shadow-lift: 0 4px 14px rgb(24 24 26 / 8%);
+
+  --sans: 'Geist', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', monospace;
+
+  /* Geist Mono slashes its zero by default. That is a convention for reading
+   * code, and this board is read by people in HR for whom a slashed zero is
+   * just an unfamiliar glyph in the middle of a time. */
+  font-feature-settings: 'zero' 0;
+
+  /* The board paints its own ground: the application around it is dark. */
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 1fr);
+  min-height: 100dvh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ------------------------------------------------------------------ bar --- */
+.hr--collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
 
-.hr__bar {
+/* ------------------------------------------------------------- sidebar --- */
+
+.side {
   position: sticky;
   top: 0;
-  z-index: 10;
+  align-self: start;
 
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--hr-gap);
-
-  margin-inline: calc(var(--hr-pad) * -1);
-  padding: max(0.875rem, env(safe-area-inset-top)) var(--hr-pad) 0.875rem;
-
-  border-bottom: 1px solid var(--line);
-  /* The rows scroll under this, so it has to be opaque enough to read against
-   * and translucent enough that it does not look pasted on top. */
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  backdrop-filter: blur(14px);
-}
-
-.hr__identity {
-  flex: 1 1 14rem;
-}
-
-.hr__title {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-}
-
-.hr__subtitle {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  margin: 0.125rem 0 0;
-  color: var(--ink-muted);
-  font-size: 0.875rem;
-}
-
-/* Spanish writes the weekday in lower case and the formatter obliges. Only the
- * opening letter is raised -- `capitalize` would raise every word and produce
- * "24 De Agosto". */
-.hr__subtitle::first-letter {
-  text-transform: uppercase;
-}
-
-.hr__clock {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  color: var(--ink);
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  text-transform: none;
-}
-
-.hr__dates,
-.hr__actions {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-.hr__actions {
-  margin-inline-start: auto;
-}
-
-.hr .button {
-  min-height: 2.75rem;
-  padding: 0.5rem 0.875rem;
-  font-size: 0.875rem;
-}
-
-/* Square, and still past the 44px minimum in both directions. */
-.hr .button--icon {
-  display: grid;
-  place-items: center;
-  width: 2.75rem;
-  padding: 0;
-}
-
-/* `progress` belongs to the punch button, which really is busy while it waits.
- * A date step that is disabled is not working on anything. */
-.hr .button:disabled {
-  cursor: not-allowed;
-}
-
-.glyph {
-  width: 1.125rem;
-  height: 1.125rem;
-}
-
-/* ---------------------------------------------------------------- stats --- */
-
-.hr__stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
-  gap: var(--hr-gap);
-}
-
-.stat {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  padding: 1rem;
-  text-align: start;
-  /* Entrance is staggered by index so the row assembles left to right. */
-  animation: rise 420ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
-  animation-delay: calc(var(--index, 0) * 55ms);
+  gap: 1.5rem;
+  height: 100dvh;
+  overflow-y: auto;
+  padding: 1rem 0.75rem calc(1rem + env(safe-area-inset-bottom));
+  border-inline-end: 1px solid var(--line);
 }
 
-button.stat {
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-  transition:
-    transform 180ms ease,
-    border-color 180ms ease,
-    background 180ms ease;
+.hr--collapsed .side {
+  display: none;
 }
 
-button.stat:hover {
-  transform: translateY(-2px);
-  border-color: var(--tone);
-  background: var(--surface-hover);
-}
-
-button.stat:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.stat--working {
-  --tone: var(--tone-working);
-}
-.stat--break {
-  --tone: var(--tone-break);
-}
-.stat--pending {
-  --tone: var(--tone-pending);
-}
-.stat--done {
-  --tone: var(--tone-done);
-}
-.stat--alert {
-  --tone: var(--tone-alert);
-}
-
-/* Selected reads as a filter that is on: the tone floods the card instead of
- * being a tick somebody has to hunt for. */
-.stat--selected {
-  border-color: var(--tone);
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--tone) 18%, transparent),
-      transparent 60%
-    ),
-    var(--surface-raised);
-}
-
-.stat__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.stat__label {
-  color: var(--ink-muted);
-  font-size: 0.8125rem;
-  font-weight: 500;
-}
-
-.stat__icon {
-  display: grid;
-  place-items: center;
-  width: 1.875rem;
-  height: 1.875rem;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--tone) 16%, transparent);
-  color: var(--tone);
-}
-
-.stat__value {
-  font-family: var(--mono);
-  font-size: 2rem;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-}
-
-.stat__caption {
-  color: var(--ink-muted);
-  font-size: 0.75rem;
-}
-
-/* --------------------------------------------------------------- panels --- */
-
-.hr__split {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-  align-items: start;
-  gap: var(--hr-gap);
-}
-
-.hr__panel {
-  animation: rise 420ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
-  animation-delay: 220ms;
-}
-
-.hr__panel-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--hr-gap);
-  margin-bottom: 0.875rem;
-}
-
-.hr__panel-head .card__title {
-  margin: 0;
-}
-
-.hr__panel-note {
-  color: var(--ink-muted);
-  font-size: 0.8125rem;
-}
-
-.hr__filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin-inline-start: auto;
-}
-
-.hr__footer {
-  color: var(--ink-muted);
-  font-size: 0.75rem;
-  margin: 0;
-  text-align: center;
-}
-
-/* ------------------------------------------------------------- statebar --- */
-
-.statebar {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.statebar__track {
-  display: flex;
-  overflow: hidden;
-  height: 0.625rem;
-  border-radius: 999px;
-  background: var(--surface-sunken);
-}
-
-.statebar__segment {
-  /* Width is a transition, so a refresh that moves one person between states
-   * slides rather than jumping. */
-  transition: width 520ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.statebar__segment--working {
-  background: var(--tone-working);
-}
-.statebar__segment--break {
-  background: var(--tone-break);
-}
-.statebar__segment--pending {
-  background: var(--tone-pending);
-}
-.statebar__segment--done {
-  background: var(--tone-done);
-}
-
-.statebar__legend {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-  gap: 0.625rem 1.75rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.statebar__item + .statebar__item {
-  border-top: 1px solid transparent;
-}
-
-.statebar__item {
+.side__brand {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.3rem 0;
-  font-size: 0.8125rem;
-}
-
-.statebar__name {
-  color: var(--ink-muted);
-}
-
-.statebar__count {
-  margin-inline-start: auto;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.9375rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
-.statebar__pct {
-  color: var(--ink-muted);
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-  min-width: 2.5rem;
-  text-align: end;
-}
-
-.dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  flex: none;
-}
-
-.dot--working {
-  background: var(--tone-working);
-}
-.dot--break {
-  background: var(--tone-break);
-}
-.dot--pending {
-  background: var(--tone-pending);
-}
-.dot--done {
-  background: var(--tone-done);
-}
-
-/* ------------------------------------------------------------ histogram --- */
-
-.histogram {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.25rem;
-  height: 7.5rem;
-}
-
-.histogram__column {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.375rem;
-  height: 100%;
-}
-
-.histogram__bar {
-  position: relative;
-  width: 100%;
-  height: var(--height);
-  min-height: 2px;
-  margin-top: auto;
-  border-radius: 5px 5px 2px 2px;
-  background: linear-gradient(180deg, var(--tone-done), color-mix(in srgb, var(--tone-done) 45%, transparent));
-  /* Grown from the baseline rather than faded in: the shape of the morning
-   * arrives, which is the thing worth looking at. */
-  animation: grow 500ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
-  animation-delay: calc(260ms + var(--index, 0) * 22ms);
-  transform-origin: bottom;
-}
-
-.histogram__bar--empty {
-  background: var(--surface-sunken);
-}
-
-.histogram__count {
-  position: absolute;
-  top: -1.125rem;
-  left: 50%;
-  transform: translateX(-50%);
-  color: var(--ink-muted);
-  font-family: var(--mono);
-  font-size: 0.6875rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.histogram__hour {
-  color: var(--ink-muted);
-  font-family: var(--mono);
-  font-size: 0.6875rem;
-  min-height: 1em;
-}
-
-/* ---------------------------------------------------------------- board --- */
-
-.board {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.board__row {
+.side__mark {
   display: grid;
-  /* Fixed tracks, not `auto`. Each row is its own grid, so an `auto` column
-   * sized itself to that row's content and a row carrying badges pushed its
-   * own times out of line with every other row. */
-  grid-template-columns: minmax(0, 1.7fr) 7rem minmax(0, 15rem) minmax(0, 1fr);
-  align-items: center;
-  gap: var(--hr-gap);
-
-  padding: 0.75rem 0.875rem;
-  border: 1px solid transparent;
-  border-radius: 11px;
-  background: var(--surface-sunken);
-
-  animation: rise 380ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
-  animation-delay: calc(var(--index, 0) * 28ms);
-  transition:
-    background 160ms ease,
-    border-color 160ms ease;
+  place-items: center;
+  width: 1.625rem;
+  height: 1.625rem;
+  border-radius: 7px;
+  background: var(--solid);
+  color: var(--solid-ink);
 }
 
-.board__row:hover {
-  border-color: var(--line);
-  background: var(--surface-hover);
+.side__mark .glyph {
+  width: 0.9375rem;
+  height: 0.9375rem;
 }
 
-.board__who {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.board__name {
-  font-weight: 550;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.board__dept {
-  color: var(--ink-muted);
-  font-size: 0.75rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Fixed tracks for the same reason the row itself has them: content-sized
- * columns let a shorter value slide the whole group out of line with the row
- * above, and these are numbers meant to be compared down the column. */
-.board__times {
-  display: grid;
-  grid-template-columns: 6rem 4rem 4rem;
-  gap: 0.75rem;
-}
-
-.board__time {
-  display: flex;
-  flex-direction: column;
-}
-
-.board__time-label {
-  color: var(--ink-muted);
-  font-size: 0.6875rem;
-}
-
-.board__time-value {
-  font-family: var(--mono);
-  font-size: 0.875rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.board__expected {
-  color: var(--ink-muted);
-}
-
-.board__flags {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.375rem;
-}
-
-.board__empty {
-  padding: 1.5rem 0;
-  text-align: center;
-}
-
-.chip {
-  justify-self: start;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 550;
-  padding: 0.2rem 0.7rem;
-  white-space: nowrap;
-}
-
-.chip--working {
-  background: color-mix(in srgb, var(--tone-working) 18%, transparent);
-  color: var(--tone-working);
-}
-.chip--break {
-  background: color-mix(in srgb, var(--tone-break) 18%, transparent);
-  color: var(--tone-break);
-}
-.chip--pending {
-  background: color-mix(in srgb, var(--tone-pending) 18%, transparent);
-  color: var(--tone-pending);
-}
-.chip--done {
-  background: color-mix(in srgb, var(--tone-done) 18%, transparent);
-  color: var(--tone-done);
-}
-
-.tag--alert {
-  border-color: var(--tone-alert);
-  color: var(--tone-alert);
-}
-
-.tag--offline {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.tag--offline .glyph {
-  width: 0.875rem;
-  height: 0.875rem;
-}
-
-/* --------------------------------------------------------------- alerts --- */
-
-.alerts {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.alerts__row {
-  display: grid;
-  grid-template-columns: 3px 1fr auto;
-  align-items: center;
-  gap: 0.875rem;
-
-  padding: 0.625rem 0.875rem 0.625rem 0;
-  border-radius: 11px;
-  background: var(--surface-sunken);
-  overflow: hidden;
-
-  animation: rise 380ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
-  animation-delay: calc(240ms + var(--index, 0) * 30ms);
-}
-
-/* Severity is a colour and a position, never a colour alone: the kind and the
- * detail beside it say what happened without reference to the stripe. */
-.alerts__severity {
-  align-self: stretch;
-}
-
-.alerts__severity--high {
-  background: var(--tone-alert);
-}
-.alerts__severity--medium {
-  background: var(--tone-break);
-}
-.alerts__severity--low {
-  background: var(--tone-pending);
-}
-
-.alerts__body {
+.side__group {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
-  min-width: 0;
 }
 
-.alerts__title {
+.side__label {
+  padding: 0 0.5rem 0.375rem;
+  color: var(--ink-faint);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.side__link {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  min-height: 2.375rem;
+  padding: 0 0.625rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+  text-align: start;
+  transition:
+    background 150ms ease,
+    color 150ms ease;
 }
 
-.alerts__kind {
-  font-weight: 550;
+.side__link:hover {
+  background: rgb(24 24 26 / 4%);
+  color: var(--ink);
 }
 
-.alerts__who {
-  color: var(--ink-muted);
-  font-size: 0.8125rem;
+/* Active is a raised white card on the paper ground -- the same relationship
+ * the content cards have to it, so "where I am" reads as one of them. */
+.side__link--on {
+  border-color: var(--line);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  color: var(--ink);
 }
 
-.alerts__detail {
-  color: var(--ink-muted);
-  font-size: 0.75rem;
-}
-
-.alerts__date {
-  color: var(--ink-muted);
+.side__count {
+  margin-inline-start: auto;
+  border-radius: 999px;
+  background: var(--bad-soft);
+  color: var(--bad);
   font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 0.05rem 0.4rem;
+}
+
+.side__foot {
+  margin-block-start: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Where the reference puts a promotional card. This one earns the space by
+ * answering the question a board left open all day actually raises: is what I
+ * am looking at still current? */
+.side__status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.side__status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 0.75rem;
+}
+
+.side__status-label {
+  color: var(--ink-soft);
+}
+
+.side__status-value {
+  margin-inline-start: auto;
+  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
 
-.alerts__empty {
-  padding: 1rem 0;
+.side__me {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
 }
 
-/* -------------------------------------------------------------- filters --- */
+.side__avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--solid);
+  color: var(--solid-ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.side__who {
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.side__name {
+  display: block;
+  overflow: hidden;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side__role {
+  display: block;
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+/* --------------------------------------------------------------- shell --- */
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  background: rgb(246 245 243 / 88%);
+  backdrop-filter: blur(12px);
+}
+
+.topbar__spacer {
+  flex: 1;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+/* --------------------------------------------------------------- parts --- */
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  animation: rise 400ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: 180ms;
+}
+
+.panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.125rem 1.25rem;
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.panel__subtitle {
+  margin: 0.125rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+}
+
+.panel__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-inline-start: auto;
+}
+
+.panel__body {
+  padding: 0 1.25rem 1.25rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--sunken);
+  border-color: var(--edge);
+}
+
+.btn:disabled {
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+.btn--solid {
+  width: 100%;
+  min-height: 2.5rem;
+  border-color: var(--solid);
+  background: var(--solid);
+  color: var(--solid-ink);
+  font-weight: 550;
+}
+
+.btn--solid:hover:not(:disabled) {
+  background: #2a2a2d;
+  border-color: #2a2a2d;
+}
+
+.btn--icon {
+  width: 2.25rem;
+  padding: 0;
+}
+
+.btn:focus-visible,
+.side__link:focus-visible,
+.field:focus-visible,
+.stat:focus-visible {
+  outline: 2px solid var(--solid);
+  outline-offset: 2px;
+}
+
+.glyph {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+
+/* --------------------------------------------------------------- input --- */
 
 .search {
   position: relative;
   display: flex;
   align-items: center;
+  flex: 1 1 15rem;
+  max-width: 26rem;
 }
 
 .search__icon {
@@ -673,76 +414,515 @@ button.stat:focus-visible {
   inset-inline-start: 0.625rem;
   display: grid;
   place-items: center;
-  color: var(--ink-muted);
+  color: var(--ink-faint);
   pointer-events: none;
 }
 
-.search__input,
-.select__input {
-  min-height: 2.75rem;
+.field {
+  width: 100%;
+  min-height: 2.25rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  background: var(--card);
   color: var(--ink);
   font: inherit;
-  font-size: 0.875rem;
-  padding: 0.5rem 0.875rem;
-  transition: border-color 160ms ease;
+  font-size: 0.8125rem;
+  padding: 0 0.75rem;
+  transition: border-color 150ms ease;
 }
 
-.search__input {
-  padding-inline-start: 2.25rem;
-  width: 12rem;
+.search .field {
+  padding-inline: 2rem 3.25rem;
 }
 
-.select__input {
+.field:hover {
+  border-color: var(--edge);
+}
+
+select.field {
   cursor: pointer;
+  padding-inline-end: 1.75rem;
 }
 
-.search__input:hover,
-.select__input:hover {
-  border-color: var(--ink-muted);
+.kbd {
+  position: absolute;
+  inset-inline-end: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--sunken);
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  padding: 0.05rem 0.3rem;
+  pointer-events: none;
 }
 
-.search__input:focus-visible,
-.select__input:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
+/* --------------------------------------------------------------- stats --- */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
+  gap: 1rem;
 }
 
-/* ---------------------------------------------------------------- state --- */
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 1.125rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  text-align: start;
+  animation: rise 400ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--index, 0) * 50ms);
+}
 
-.pulse {
+button.stat {
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+button.stat:hover {
+  border-color: var(--edge);
+  box-shadow: var(--shadow-lift);
+  transform: translateY(-1px);
+}
+
+/* On, not merely hovered: the ring is the same near-black as the type, so a
+ * filter that is running is obvious without spending any colour on it. */
+.stat--on {
+  border-color: var(--solid);
+  box-shadow: 0 0 0 1px var(--solid);
+}
+
+.stat__icon {
+  display: grid;
+  place-items: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--sunken);
+  color: var(--ink);
+}
+
+.stat__label {
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.stat__figure {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stat__value {
+  font-family: var(--mono);
+  font-size: 1.875rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.stat__caption {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  padding: 0.15rem 0.45rem;
+  white-space: nowrap;
+}
+
+.pill--good {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.pill--warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.pill--bad {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.pill--info {
+  background: var(--info-soft);
+  color: var(--info);
+}
+.pill--mute {
+  border: 1px solid var(--line);
+  background: var(--sunken);
+  color: var(--ink-soft);
+}
+
+/* --------------------------------------------------------------- chart --- */
+
+.chart {
+  position: relative;
+  width: 100%;
+  height: 13rem;
+}
+
+.chart svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.chart__grid {
+  stroke: var(--line-soft);
+  stroke-width: 1;
+}
+
+.chart__line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* Drawn on, left to right. The shape of the morning arrives rather than
+ * appearing, which is the part worth watching. */
+.chart__line--draw {
+  stroke-dasharray: var(--len);
+  stroke-dashoffset: var(--len);
+  animation: draw 900ms cubic-bezier(0.33, 1, 0.68, 1) forwards;
+}
+
+.chart__area {
+  animation: fade 900ms ease backwards;
+}
+
+.chart__dot {
+  fill: var(--ink);
+}
+
+.chart__tick {
+  fill: var(--ink-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.swatch {
   width: 0.5rem;
   height: 0.5rem;
-  border-radius: 50%;
-  background: var(--tone-working);
-  animation: pulse 2.2s ease-in-out infinite;
+  border-radius: 2px;
+  background: var(--ink);
 }
 
-.pulse--off {
-  background: var(--ink-muted);
+.swatch--soft {
+  background: #d6d3ce;
+}
+
+/* --------------------------------------------------------------- board --- */
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  /* Fixed tracks, not `auto`: each row is its own grid, and content-sized
+   * columns let a row carrying badges push its own figures out of line with
+   * every row above it. */
+  grid-template-columns: minmax(0, 1.6fr) 7.25rem minmax(0, 14rem) minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--line-soft);
+  transition: background 140ms ease;
+  animation: rise 340ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--index, 0) * 22ms);
+}
+
+.row:hover {
+  background: var(--sunken);
+}
+
+.row__who {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.row__avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.875rem;
+  height: 1.875rem;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--sunken);
+  color: var(--ink-soft);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.row__ident {
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.row__name {
+  display: block;
+  overflow: hidden;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row__dept {
+  display: block;
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row__times {
+  display: grid;
+  grid-template-columns: 5.5rem 3.75rem 3.75rem;
+  gap: 0.5rem;
+}
+
+.row__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.row__cell-label {
+  color: var(--ink-faint);
+  font-size: 0.6875rem;
+}
+
+.row__cell-value {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.row__expected {
+  color: var(--ink-faint);
+}
+
+.row__flags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.375rem;
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  justify-self: start;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.2rem 0.6rem 0.2rem 0.45rem;
+  white-space: nowrap;
+}
+
+.state--working {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.state--break {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.state--pending {
+  border: 1px solid var(--line);
+  background: var(--sunken);
+  color: var(--ink-soft);
+}
+.state--done {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: currentcolor;
+  flex: none;
+}
+
+.empty {
+  color: var(--ink-soft);
+  padding: 2.5rem 1.25rem;
+  text-align: center;
+}
+
+/* -------------------------------------------------------------- alerts --- */
+
+.alert {
+  display: grid;
+  grid-template-columns: 0.1875rem 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem 0.75rem 0;
+  border-top: 1px solid var(--line-soft);
+  transition: background 140ms ease;
+  animation: rise 340ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--index, 0) * 26ms);
+}
+
+.alert:hover {
+  background: var(--sunken);
+}
+
+/* Severity is a stripe *and* a word: the kind and the sentence beside it say
+ * what happened without any reference to the colour. */
+.alert__stripe {
+  align-self: stretch;
+}
+
+.alert__stripe--high {
+  background: var(--bad);
+}
+.alert__stripe--medium {
+  background: var(--warn);
+}
+.alert__stripe--low {
+  background: #d6d3ce;
+}
+
+.alert__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.alert__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.alert__kind {
+  font-weight: 550;
+}
+
+.alert__who {
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+}
+
+.alert__detail {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.alert__when {
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------- notices --- */
+
+.note {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+}
+
+.note--warn {
+  border-color: #f0dca8;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.live {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--good);
+  flex: none;
+  animation: pulse 2.4s ease-in-out infinite;
+}
+
+.live--off {
+  background: var(--ink-faint);
   animation: none;
 }
 
+.clock {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
 .skeleton {
-  border-color: transparent;
-  background: linear-gradient(
-    100deg,
-    var(--surface-raised) 30%,
-    var(--surface-hover) 50%,
-    var(--surface-raised) 70%
-  );
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(100deg, var(--card) 30%, var(--sunken) 50%, var(--card) 70%);
   background-size: 220% 100%;
   animation: shimmer 1.4s linear infinite;
 }
 
 .skeleton--stat {
-  height: 7rem;
+  height: 7.5rem;
 }
 
 .skeleton--panel {
-  height: 11rem;
+  height: 16rem;
 }
 
 .sr-only {
@@ -756,12 +936,12 @@ button.stat:focus-visible {
   white-space: nowrap;
 }
 
-/* ----------------------------------------------------------- animations --- */
+/* ---------------------------------------------------------- animations --- */
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(14px) scale(0.97);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -769,14 +949,15 @@ button.stat:focus-visible {
   }
 }
 
-@keyframes grow {
-  from {
-    transform: scaleY(0);
-    opacity: 0.4;
-  }
+@keyframes draw {
   to {
-    transform: scaleY(1);
-    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
   }
 }
 
@@ -784,11 +965,9 @@ button.stat:focus-visible {
   0%,
   100% {
     opacity: 1;
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--tone-working) 55%, transparent);
   }
   50% {
-    opacity: 0.75;
-    box-shadow: 0 0 0 5px transparent;
+    opacity: 0.4;
   }
 }
 
@@ -801,56 +980,59 @@ button.stat:focus-visible {
   }
 }
 
-/* --------------------------------------------------------------- narrow --- */
+/* -------------------------------------------------------------- narrow --- */
 
-@media (max-width: 60rem) {
-  .board__row {
-    grid-template-columns: 1fr auto;
-    grid-template-areas:
-      'who chip'
-      'times times'
-      'flags flags';
+@media (max-width: 68rem) {
+  .hr {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .board__who {
+  .side {
+    display: none;
+  }
+
+  .hr--open .side {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    display: flex;
+    width: 16rem;
+    background: var(--paper);
+    box-shadow: var(--shadow-lift);
+  }
+}
+
+@media (max-width: 60rem) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'who state'
+      'times times'
+      'flags flags';
+    gap: 0.625rem 1rem;
+  }
+
+  .row__who {
     grid-area: who;
   }
 
-  .board__row .chip {
-    grid-area: chip;
+  .row .state {
+    grid-area: state;
+    justify-self: end;
   }
 
-  .board__times {
+  .row__times {
     grid-area: times;
-    justify-content: space-between;
+    justify-content: start;
   }
 
-  .board__flags {
+  .row__flags {
     grid-area: flags;
     justify-content: flex-start;
   }
 
-  .board__flags:empty {
+  .row__flags:empty {
     display: none;
-  }
-}
-
-@media (max-width: 40rem) {
-  .hr__actions {
-    margin-inline-start: 0;
-  }
-
-  .hr__filters {
-    margin-inline-start: 0;
-    width: 100%;
-  }
-
-  .search__input {
-    width: 100%;
-  }
-
-  .search {
-    flex: 1 1 8rem;
   }
 }
 
@@ -865,5 +1047,10 @@ button.stat:focus-visible {
   .hr *::after {
     animation: none !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .chart__line--draw {
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
   }
 }

@@ -24,35 +24,31 @@ export function AlertsPanel({
   readonly boardDate: string;
 }): JSX.Element {
   if (alerts.length === 0) {
-    return (
-      <p className="muted alerts__empty">
-        Sin alertas abiertas. Todo el mundo dentro de su horario.
-      </p>
-    );
+    return <p className="empty">Sin alertas abiertas. Todo el mundo dentro de su horario.</p>;
   }
 
   return (
-    <ul className="alerts">
+    <ul className="rows">
       {alerts.map((alert, index) => (
         <li
           key={alert.id}
-          className={`alerts__row alerts__row--${alert.severity}`}
-          style={{ '--index': Math.min(index, 10) } as CSSProperties}
+          className="alert"
+          style={{ '--index': Math.min(index, 14) } as CSSProperties}
         >
-          <span className={`alerts__severity alerts__severity--${alert.severity}`}>
+          <span className={`alert__stripe alert__stripe--${alert.severity}`}>
             <span className="sr-only">Severidad {SEVERITY_LABELS[alert.severity]}</span>
           </span>
 
-          <span className="alerts__body">
-            <span className="alerts__title">
-              <span className="alerts__kind">{ALERT_LABELS[alert.kind]}</span>
-              <span className="alerts__who">{alert.employee_name}</span>
+          <span className="alert__body">
+            <span className="alert__title">
+              <span className="alert__kind">{ALERT_LABELS[alert.kind]}</span>
+              <span className="alert__who">{alert.employee_name}</span>
             </span>
-            <span className="alerts__detail">{describeAlert(alert.kind, alert.details)}</span>
+            <span className="alert__detail">{describeAlert(alert.kind, alert.details)}</span>
           </span>
 
-          <span className="alerts__date">
-            {/* On the day itself the date is on the header already; the hour it
+          <span className="alert__when">
+            {/* On the day itself the date is already in the header; the hour it
               * was raised is the part somebody still does not know. */}
             {alert.alert_date === boardDate
               ? formatTime(alert.created_at, timeZone)

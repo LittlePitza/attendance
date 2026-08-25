@@ -63,6 +63,14 @@ function show(): void {
   render(<HrDashboard profile={profile} onSignOut={() => undefined} onOpenMyDay={null} />);
 }
 
+/**
+ * The sidebar link, not the counter card -- both are buttons reading "Alertas",
+ * and that is on purpose: one navigates, the other filters to the same place.
+ */
+function navLink(name: RegExp | string): HTMLElement {
+  return within(screen.getByRole('navigation', { name: 'Secciones' })).getByRole('button', { name });
+}
+
 beforeEach(() => {
   teamDay.mockResolvedValue([
     member({ employee_id: '1', employee_name: 'Ana Ruiz', state: 'working' }),
@@ -124,7 +132,7 @@ describe('HrDashboard', () => {
     expect(await screen.findByText(/Nadie coincide con este filtro/)).toBeInTheDocument();
   });
 
-  it('shows open alerts against the person they belong to', async () => {
+  it('counts alerts on the row of the person they belong to', async () => {
     openAlerts.mockResolvedValue([
       {
         id: 'a1',
@@ -141,16 +149,35 @@ describe('HrDashboard', () => {
     ]);
 
     show();
+    await screen.findByText('Carla Sosa');
+
+    // The board itself carries the count, so somebody scanning rows does not
+    // have to hold the alert list in their head at the same time.
+    expect(await screen.findByText('1 alerta')).toBeInTheDocument();
+
+    // The alert itself lives in its own view, one click away.
+    await userEvent.click(navLink(/Alertas/));
 
     const panel = await screen.findByRole('heading', { name: 'Alertas abiertas' });
     const card = panel.closest('section');
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).getByText('Sin entrada')).toBeInTheDocument();
     expect(within(card as HTMLElement).getByText(/42 min/)).toBeInTheDocument();
+  });
 
-    // And the row for that person carries the count, so the board and the panel
-    // do not have to be read against each other.
-    expect(screen.getByText('1 alerta')).toBeInTheDocument();
+  it('moves between the team and the alerts, and marks where you are', async () => {
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    const alertsLink = navLink(/Alertas/);
+    await userEvent.click(alertsLink);
+
+    expect(await screen.findByRole('heading', { name: 'Alertas abiertas' })).toBeInTheDocument();
+    expect(alertsLink).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByText('Ana Ruiz')).not.toBeInTheDocument();
+
+    await userEvent.click(navLink('Equipo'));
+    expect(await screen.findByText('Ana Ruiz')).toBeInTheDocument();
   });
 
   it('offers no way to close an alert, because closing one is not a screen decision', async () => {
@@ -170,6 +197,8 @@ describe('HrDashboard', () => {
     ]);
 
     show();
+    await screen.findByText('Ana Ruiz');
+    await userEvent.click(navLink(/Alertas/));
     await screen.findByText('Entrada tardía');
 
     expect(screen.queryByRole('button', { name: /descartar|cerrar|resolver/i })).toBeNull();

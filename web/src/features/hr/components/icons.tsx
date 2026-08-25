@@ -1,13 +1,13 @@
 import type { JSX } from 'react';
 
 /**
- * The eight icons this board uses, drawn rather than installed.
+ * The icons this board uses, drawn rather than installed.
  *
- * An icon set is a dependency to keep current and audit for the sake of a few
- * hundred bytes of path data. These are stroked on a 24-unit grid in the same
- * style throughout, so they read as one family, and `aria-hidden` because every
- * one of them sits beside its own label -- an icon that repeats the text next
- * to it only makes a screen reader say everything twice.
+ * An icon package is a dependency to keep current and audit for the sake of a
+ * few hundred bytes of path data. These are stroked on a 24-unit grid at one
+ * weight, so they read as one family, and every one is `aria-hidden` because it
+ * sits beside its own label -- an icon repeating the text next to it only makes
+ * a screen reader say everything twice.
  */
 function Glyph({ children }: { children: JSX.Element }): JSX.Element {
   return (
@@ -16,7 +16,7 @@ function Glyph({ children }: { children: JSX.Element }): JSX.Element {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.75"
+      strokeWidth="1.7"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -26,6 +26,16 @@ function Glyph({ children }: { children: JSX.Element }): JSX.Element {
     </svg>
   );
 }
+
+/** The brand mark: a clock face, which is what the product is. */
+export const IconMark = (): JSX.Element => (
+  <Glyph>
+    <g>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
+    </g>
+  </Glyph>
+);
 
 export const IconWorking = (): JSX.Element => (
   <Glyph>
@@ -75,6 +85,26 @@ export const IconAlert = (): JSX.Element => (
   </Glyph>
 );
 
+export const IconTeam = (): JSX.Element => (
+  <Glyph>
+    <g>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+      <path d="M16.5 5.3a3.2 3.2 0 0 1 0 5.4" />
+      <path d="M18 14.4a6.5 6.5 0 0 1 3.5 5.6" />
+    </g>
+  </Glyph>
+);
+
+export const IconSelf = (): JSX.Element => (
+  <Glyph>
+    <g>
+      <rect x="4" y="4" width="16" height="16" rx="3.5" />
+      <path d="M9 12.5l2 2 4-4.5" />
+    </g>
+  </Glyph>
+);
+
 export const IconSearch = (): JSX.Element => (
   <Glyph>
     <g>
@@ -93,6 +123,15 @@ export const IconRefresh = (): JSX.Element => (
   </Glyph>
 );
 
+export const IconMenu = (): JSX.Element => (
+  <Glyph>
+    <g>
+      <rect x="3" y="4" width="18" height="16" rx="3" />
+      <path d="M9.5 4v16" />
+    </g>
+  </Glyph>
+);
+
 export const IconChevron = ({ direction }: { direction: 'left' | 'right' }): JSX.Element => (
   <Glyph>
     <path d={direction === 'left' ? 'm14.5 5-7 7 7 7' : 'm9.5 5 7 7-7 7'} />
@@ -107,6 +146,16 @@ export const IconOffline = (): JSX.Element => (
       <path d="M5 13a10 10 0 0 1 3.3-2.2" />
       <path d="M19 13a10 10 0 0 0-7.6-2.9" />
       <path d="M12 20h.01" />
+    </g>
+  </Glyph>
+);
+
+export const IconReview = (): JSX.Element => (
+  <Glyph>
+    <g>
+      <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H15l5 5v9.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5Z" />
+      <path d="M14.5 4v5.5H20" />
+      <path d="M8.5 14h7" />
     </g>
   </Glyph>
 );

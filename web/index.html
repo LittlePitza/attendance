@@ -6,6 +6,20 @@
     <meta name="theme-color" content="#0f172a" />
     <meta name="description" content="Registro de entradas, pausas y salidas para trabajo en casa." />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+
+    <!--
+      Geist, with a real system fallback. The board is a dense grid of figures
+      and names, and the face carries most of that; the service worker caches
+      it after the first visit so a later offline launch still gets it. If it
+      never arrives the stack below is what renders, and nothing depends on the
+      difference.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
+    />
     <title>Checador</title>
   </head>
   <body>
