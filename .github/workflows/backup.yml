@@ -35,9 +35,16 @@ jobs:
 
     steps:
       - name: Install the Supabase CLI
+        # Pinned to the same version as the "supabase" devDependency in
+        # package.json, for two reasons. `latest` resolves the release over an
+        # anonymous api.github.com call, which is rate limited per runner IP.
+        # And the shape of the dump is version specific: the CLI hardcodes the
+        # list of schemas it excludes and a series of sed rewrites, both of
+        # which move between releases. The verification step below asserts
+        # against this version's output, so bump the two together.
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.115.0
 
       - name: Dump schema, data and roles
         env:
@@ -51,10 +58,90 @@ jobs:
           mkdir -p dump
           # Three separate pieces, so a restore can bring back just the schema,
           # or just the data, without hand-editing a 14 MB file.
+          #
+          # No --schema filter here, on purpose. The CLI excludes only Supabase's
+          # own internal schemas, so `attendance`, `internal` and `public` are all
+          # captured by default. Do NOT "harden" this by adding
+          # --schema attendance,internal,public: a multi-value --schema is emitted
+          # into the generated script UNQUOTED, as
+          # `--schema=attendance|internal|public`, and that script runs under
+          # `bash -c`, which parses the pipes as a pipeline. It breaks the dump
+          # instead of narrowing it.
           supabase db dump --db-url "$DB_URL" -f dump/roles.sql  --role-only
           supabase db dump --db-url "$DB_URL" -f dump/schema.sql
           supabase db dump --db-url "$DB_URL" -f dump/data.sql   --data-only
-          ls -lh dump/
+
+          # The CLI excludes supabase_migrations from both dumps above, so
+          # without these two a restored project could never be migrated again.
+          # A single-value --schema replaces that exclusion safely. Two files,
+          # because the table has to exist before its rows can load.
+          supabase db dump --db-url "$DB_URL" --schema supabase_migrations \
+            -f dump/migration_history_schema.sql
+          supabase db dump --db-url "$DB_URL" --schema supabase_migrations \
+            --data-only -f dump/migration_history_data.sql
+
+          # So that whoever finds this archive in three years knows what it is,
+          # which project it came from and which tool wrote it. No credentials:
+          # DB_URL is never echoed.
+          {
+            echo "project ref : cyjpucvvekzfpvvonuld (pimsa_ti)"
+            echo "taken at    : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "cli version : $(supabase --version)"
+            echo "workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "restore     : see docs/free-plan.md, section Restoring"
+            echo ""
+            echo "files:"
+          } > dump/MANIFEST.txt
+          ls -l dump/ >> dump/MANIFEST.txt
+          cat dump/MANIFEST.txt
+
+      - name: Verify the dump is this project's data
+        # Deliberately NOT a gate on the upload. `if-no-files-found: error` runs
+        # after tar and gpg, so it can only ever see a MISSING file, never an
+        # empty, truncated or wrong-database one -- a dump taken against the
+        # wrong project would upload happily. These assertions are the only
+        # thing that would notice. But a suspect artifact still beats no
+        # artifact, so a failure here is only recorded, and the run is failed at
+        # the very end, once the upload has already happened.
+        run: |
+          set -uo pipefail
+          status=ok
+          fail() { echo "::error::$1"; status=failed; }
+
+          # roles.sql is legitimately about one line long: the CLI comments out
+          # every Supabase built-in role and then deletes the commented lines.
+          # So check its terminator, never its size.
+          for f in roles data; do
+            if [ "$(tail -n1 "dump/$f.sql")" != "RESET ALL;" ]; then
+              fail "dump/$f.sql does not end in 'RESET ALL;' - truncated?"
+            fi
+          done
+
+          # schema.sql has no terminator of its own: the CLI's final sed strips
+          # pg_dump's footer along with every other comment, so check content.
+          # These match on schema and table NAMES rather than statement syntax,
+          # so they survive a later switch to --use-copy.
+          grep -qE 'CREATE SCHEMA (IF NOT EXISTS )?"attendance"' dump/schema.sql \
+            || fail "dump/schema.sql does not create the attendance schema - wrong database?"
+          grep -q '"attendance"\."punches"' dump/schema.sql \
+            || fail "dump/schema.sql has no attendance.punches - wrong database?"
+          grep -q '"supabase_migrations"\."schema_migrations"' dump/migration_history_schema.sql \
+            || fail "the migration ledger is missing from the dump"
+
+          # Row dependent by nature: a --data-only dump emits nothing at all for
+          # an empty table. If this ever fires for a legitimate reason, fix it
+          # here deliberately rather than deleting the check.
+          grep -q '"public"\."empleados"' dump/data.sql \
+            || fail "dump/data.sql carries no empleados rows - wrong database?"
+
+          # A warning, not a failure: before rollout there are genuinely no
+          # punches yet. Once people are clocking in, this line going quiet
+          # means the labour record is missing from the backup.
+          grep -q '"attendance"\."punches"' dump/data.sql \
+            || echo "::warning::dump/data.sql carries no punches. Expected before rollout, alarming after it."
+
+          echo "VERIFY_STATUS=$status" >> "$GITHUB_ENV"
+          echo "verification: $status"
 
       - name: Encrypt
         env:
@@ -70,7 +157,10 @@ jobs:
               --passphrase "$PASSPHRASE" \
               --output "backup-$(date -u +%Y%m%d).tar.gz.gpg" \
               dump.tar.gz
-          # The plaintext must never reach the artifact.
+          # The plaintext must never reach the artifact. data.sql includes the
+          # auth schema -- every account's email and password hash -- so this
+          # step is not hygiene, it is the only thing standing between read
+          # access to this repository and every credential record.
           rm -rf dump dump.tar.gz
           ls -lh backup-*.gpg
 
@@ -84,3 +174,22 @@ jobs:
           # copy from the 1st of each month and store it elsewhere.
           retention-days: 30
           if-no-files-found: error
+
+      - name: Fail if the dump did not verify
+        # Last, so that the artifact has already been uploaded and can be
+        # inspected to find out why.
+        run: |
+          if [ "${VERIFY_STATUS:-ok}" != "ok" ]; then
+            echo "::error::The backup uploaded but did not verify. Download the"
+            echo "::error::artifact and read MANIFEST.txt before trusting it."
+            exit 1
+          fi
+          echo "The dump verified."
+
+      - name: Warn on failure
+        if: failure()
+        run: |
+          echo "::error::The daily backup failed, so there is no backup for today."
+          echo "::error::The Free plan takes none of its own. Check the"
+          echo "::error::SUPABASE_DB_URL and BACKUP_PASSPHRASE secrets, then read"
+          echo "::error::docs/free-plan.md."
