@@ -1,4 +1,5 @@
 import { useCallback, useState, type JSX } from 'react';
+import { ChoosePasswordScreen } from './features/auth/ChoosePasswordScreen';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { useProfile } from './features/auth/useProfile';
 import { useSession } from './features/auth/useSession';
@@ -27,6 +28,15 @@ export function App(): JSX.Element {
 
   if (session === null) {
     return <LoginScreen />;
+  }
+
+  // Set when HR hands out a temporary password, cleared when the person chooses
+  // their own. Read from the session rather than from `my_profile()` because it
+  // is a fact about the account, not about the employee -- and because it has to
+  // hold before any other call is made: while it is true, somebody else knows
+  // this password.
+  if (session.user.user_metadata['must_change_password'] === true) {
+    return <ChoosePasswordScreen onSignOut={signOut} />;
   }
 
   return <SignedIn onSignOut={signOut} />;

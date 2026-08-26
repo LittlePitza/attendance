@@ -165,6 +165,18 @@ The role decides which screen opens and nothing else. `team_day()` and
 HR gets everyone without a single role check in the browser -- a role tampered
 with in devtools changes what is offered, never what comes back.
 
+**The administration screen** (`web/src/features/admin/`) is the one place in
+the client where somebody types, and it is why `attendance.schedules`,
+`attendance.alert_rules` and `public.user_roles` are no longer edited in the SQL
+editor. It holds no rule either: every field it offers is validated again by the
+function it calls, and what it prints on a refusal is the database's own Spanish
+sentence rather than a kinder one of its own.
+
+The one thing it decides is what to *draw*: the sidebar hides the entry from a
+manager. That is a courtesy, not a permission -- `list_accounts()` refuses
+anybody who is not `hr` or `admin`, so a forced route reaches a screen whose
+every call comes back 403.
+
 **No UI framework, and no icon package.** The whole client has four runtime
 dependencies. A component library would bring a build-time toolchain and dozens
 of transitive packages to style what is, in total, two screens; the icons are a
@@ -451,7 +463,7 @@ cd supabase/functions && deno test --filter "recipient"
 ```
 
 **The SQL suites are the exception: there is no way to run one.**
-`npm run db:test` runs all five, because the wrapper takes a single known
+`npm run db:test` runs all six, because the wrapper takes a single known
 action and rejects every additional argument -- which is the same property that
 stops a suite being pointed at a different database by accident. Narrow inside
 the file instead.
@@ -459,7 +471,7 @@ the file instead.
 `npm test` verifies the assembler, command allowlist, local-only configuration,
 portable CLI launcher and documentation guardrails. `npm run db:verify` then
 builds `.local/supabase`, starts local Postgres, resets it from all migrations
-and synthetic fixtures, and runs the five SQL suites.
+and synthetic fixtures, and runs the six SQL suites.
 
 The wrapper accepts one known action and constructs every Supabase argument
 itself. There is no `--db-url`, link command, project selector or remote fallback.
@@ -476,7 +488,7 @@ boundary for an operating database.
 npm run db:prepare  # assemble the ignored local workspace
 npm run db:start    # start only the local database service
 npm run db:reset    # replay migrations and synthetic seed locally
-npm run db:test     # run the punch, alert, read, review and security SQL suites
+npm run db:test     # punch, alert, read, review, admin and security SQL suites
 npm run db:verify   # start, reset and test in one command
 npm run db:stop     # stop this repository's local stack
 ```
@@ -557,5 +569,11 @@ select tablename, policyname, cmd from pg_policies
   it is called and no cron job calls it. Scheduling means deciding where the
   function URL and its key live for `pg_net` to use, which is a credential
   decision and so its own change.
-- **The 31 user accounts do not exist yet.** The agreement was to create 2 or 3
-  test accounts first. `public.empleados.auth_user_id` is at zero.
+- **The 31 user accounts still have to be created**, one at a time, on
+  **Configuración → Accesos**. The agreement was to start with 2 or 3. Until an
+  account exists a person cannot punch, and `evaluate_alerts()` does not look at
+  them -- so onboarding somebody is also what puts them under watch.
+- **There is no leave or absence table.** Somebody on holiday collects a
+  `missing_entry` every day until one exists, and HR dismisses each by hand on
+  **Revisión**. Closing it is one extra condition inside `evaluate_alerts()`, not
+  a second evaluator.

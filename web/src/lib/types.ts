@@ -252,3 +252,130 @@ export interface AlertDecisionResult {
   readonly state: AlertDecision;
   readonly kind: AlertKind;
 }
+
+/* ------------------------------------------------------- Administration ---
+ * `list_accounts()`, `list_departments()`, `list_schedules()` and
+ * `list_alert_rules()` are `returns table`, so each arrives as an array of
+ * rows. The writers return a single jsonb object, like `punch()` does.
+ *
+ * These shapes are read only on the administration screen, which HR and admin
+ * reach. Nothing here encodes who may see it: `list_accounts()` refuses anybody
+ * else outright, and the three others answer through RLS.
+ */
+
+/** The roles an account can be given. `guest` is absent: it is the default, not a choice. */
+export const ASSIGNABLE_ROLES = ['employee', 'manager', 'hr', 'admin'] as const;
+export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
+
+/**
+ * One person and the state of their access.
+ *
+ * `role` and `account_email` are null while `has_account` is false, which is the
+ * ordinary state of somebody who has not been enrolled yet.
+ * `must_change_password` stays true from the moment HR hands over a temporary
+ * password until the person chooses their own -- so while it is true, HR still
+ * knows how to sign in as them.
+ */
+export interface AccountRow {
+  readonly employee_id: string;
+  readonly employee_name: string;
+  readonly employee_email: string;
+  readonly job_title: string | null;
+  readonly department_id: string | null;
+  readonly department: string | null;
+  readonly has_account: boolean;
+  readonly role: AssignableRole | null;
+  readonly account_email: string | null;
+  readonly last_sign_in_at: string | null;
+  readonly must_change_password: boolean;
+  readonly schedule_scope: ScheduleScope | null;
+  readonly schedule_name: string | null;
+}
+
+export interface DepartmentRow {
+  readonly id: string;
+  readonly name: string;
+  readonly time_zone: string;
+  readonly active: boolean;
+  readonly employee_count: number;
+}
+
+export const SCHEDULE_SCOPES = ['global', 'department', 'employee'] as const;
+export type ScheduleScope = (typeof SCHEDULE_SCOPES)[number];
+
+/** Times are `HH:MM`, the same shape `my_day()` sends. Days are ISO: 1 = Monday. */
+export interface ScheduleRow {
+  readonly id: string;
+  readonly scope: ScheduleScope;
+  readonly applies_to: string;
+  readonly department_id: string | null;
+  readonly employee_id: string | null;
+  readonly name: string;
+  readonly days: readonly number[];
+  readonly entry_from: string;
+  readonly entry_until: string;
+  readonly entry_expected: string;
+  readonly exit_expected: string;
+  readonly grace_minutes: number;
+  readonly break_max_minutes: number;
+  readonly valid_from: string;
+  readonly valid_until: string | null;
+  readonly active: boolean;
+}
+
+/**
+ * What `save_schedule()` is given. `id` present means edit, absent means create.
+ *
+ * The three optional fields spell out `| undefined` because `tsconfig` sets
+ * `exactOptionalPropertyTypes`: a form that clears a department when the scope
+ * changes assigns `undefined`, which without this is a different thing from
+ * absent. Both mean "no department" here, and the API module drops either one
+ * rather than sending a null the database would refuse.
+ */
+export interface ScheduleDraft {
+  readonly id?: string | undefined;
+  readonly scope: ScheduleScope;
+  readonly departmentId?: string | undefined;
+  readonly employeeId?: string | undefined;
+  readonly name: string;
+  readonly days: readonly number[];
+  readonly entryFrom: string;
+  readonly entryUntil: string;
+  readonly entryExpected: string;
+  readonly exitExpected: string;
+  readonly graceMinutes: number;
+  readonly breakMaxMinutes: number;
+}
+
+export interface AlertRuleRow {
+  readonly id: string;
+  readonly department_id: string | null;
+  readonly department: string;
+  readonly kind: AlertKind;
+  readonly active: boolean;
+  readonly threshold_minutes: number;
+  readonly recipients: string | null;
+  readonly updated_at: string;
+}
+
+export interface SaveResult {
+  readonly created: boolean;
+}
+
+/**
+ * What the provisioning function answers with.
+ *
+ * `temporary_password` is present on a creation and on a reset, and is the only
+ * time it is ever readable: it is not stored anywhere the client can ask again.
+ * `recorded` is false when the password was changed but the audit row could not
+ * be written -- worth showing, and not a failed reset.
+ */
+export interface ProvisionResult {
+  readonly employee_id: string;
+  readonly employee_name: string;
+  readonly email?: string;
+  readonly role?: AssignableRole;
+  readonly temporary_password?: string;
+  readonly recorded?: boolean;
+  readonly locked_out?: boolean;
+}

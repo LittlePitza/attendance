@@ -100,8 +100,11 @@ jobs:
       - name: Lint
         run: deno lint
 
+      # `deno task check` rather than the file list spelled out again: the task
+      # in deno.json is the one place that names every entry point, so a new
+      # function is type-checked without this file having to hear about it.
       - name: Type-check
-        run: deno check alerts-notify/index.ts _shared/*_test.ts
+        run: deno task check
 
       - name: Run the unit tests
         run: deno test

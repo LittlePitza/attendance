@@ -7,9 +7,16 @@
 -- repository. It contains no production data and is not an authoritative copy
 -- of the ti-hub schema.
 
+-- `correo` and `puesto` are part of the contract because public.list_accounts()
+-- reads them: the account an employee signs in with is created from the address
+-- the help desk maintains here, never from one the client sent. `correo` is
+-- `not null` in production and stays `not null` here, so a fixture cannot make
+-- the address optional in a way production would not allow.
 create table public.empleados (
   id           uuid        primary key default gen_random_uuid(),
   nombre       text        not null,
+  correo       text        not null,
+  puesto       text,
   departamento text,
   estado       text        not null default 'activo',
   created_at   timestamptz not null default now(),

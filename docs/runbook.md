@@ -39,19 +39,30 @@ Leaked-password blocking cannot be enabled on the Free plan. See
 
 ### 3. Create the test accounts
 
-The agreement was to start with **2 or 3**, not all 31. For each one:
+The agreement was to start with **2 or 3**, not all 31.
+
+This is done on the **Configuración → Accesos** screen of the board, not in the
+SQL editor. Pick the person, pick the role, press *Crear acceso*: the
+`admin-accounts` Edge Function creates the account with the address in
+`public.empleados.correo`, links it, assigns the role, and hands back a temporary
+password shown once. The person has to choose their own before the application
+lets them anywhere else, which is what ends HR knowing it.
+
+Two things only that path gets right, and they are the reason it exists:
+
+- The login address comes from the catalogue, never from the request. An account
+  created by hand can end up carrying somebody else's address.
+- `attendance.audit_events` records who granted the access, because the write is
+  made with the HR person's own token rather than with a service key.
+
+The **first** account is the exception: with nobody able to sign in, there is
+nobody to press the button. The single administrator account that predates the
+checador is the way in, so link it to its employee record once, by hand:
 
 ```sql
--- 1. Create the account in the dashboard (Authentication → Users → Add user),
---    with a random password and "Auto Confirm User" checked.
-
--- 2. Link it to the employee record and assign a role.
 update public.empleados
-   set auth_user_id = '<account-uuid>'
- where correo = 'person@plasticospimsa.com';
-
-insert into public.user_roles (auth_user_id, role, note)
-values ('<account-uuid>', 'employee', 'Test account');
+   set auth_user_id = (select id from auth.users order by created_at limit 1)
+ where correo = 'sistemas@plasticospimsa.com';
 ```
 
 Check that it landed correctly:
@@ -236,9 +247,12 @@ That is what makes the record defensible: nothing changes silently.
 
 ### HR is getting alerts that should not exist
 
-Do not delete the alert and do not stop the cron job. Alerts are dismissed
-(`state = 'dismissed'`), which keeps the record of what the system saw, and the
-rule behind them is turned off or widened where it lives:
+Do not delete the alert and do not stop the cron job. Alerts are dismissed on
+**Revisión** with a note, which keeps the record of what the system saw, and the
+rule behind them is widened or switched off on **Configuración → Alertas**.
+
+The SQL below is what those two screens do, kept for the case where the board
+itself is unreachable:
 
 ```sql
 -- Widen the threshold for one department, in minutes.
@@ -282,14 +296,13 @@ select status, count(*), max(created_at) from attendance.notification_outbox
   than borrow the help desk's list. Fix it with a global rule, which is the
   durable answer:
 
-  ```sql
-  insert into attendance.alert_rules (department_id, kind, recipients)
-  select null, kind, 'rh@empresa.com'
-    from unnest(array['late_entry', 'missing_entry', 'break_exceeded',
-                      'missing_exit', 'no_connection', 'review_offline',
-                      'clock_tampered']) as kind
-  on conflict do nothing;
-  ```
+  Fix it on **Configuración → Alertas**: fill in *Destinatarios* on the rules
+  that matter and save. The screen warns on any active rule that names nobody.
+
+  An earlier version of this runbook offered an `insert ... on conflict do
+  nothing` here. It did nothing at all: the seven global rows already exist, so
+  every insert conflicted and was skipped. `public.save_alert_rule()` is an
+  upsert against the right partial index, which is what the screen calls.
 
   Rows already queued keep the null they were enqueued with, so set the function
   secret too if you want the existing backlog delivered.
@@ -396,9 +409,11 @@ follow the machine rather than the person, that is a decision about what the
 company is measuring — and it belongs in `internal.record_punch()`, not in a
 launcher.
 
-## Deploying the dispatcher
+## Deploying the Edge Functions
 
-`alerts-notify` is deployed on its own, and deploying it changes nothing until
+There are two, and they are deployed separately because they fail separately.
+
+`alerts-notify` drains the outbox, and deploying it changes nothing until
 something calls it -- there is still no cron job that does.
 
 ```bash
@@ -406,8 +421,18 @@ supabase functions deploy alerts-notify --project-ref cyjpucvvekzfpvvonuld
 supabase secrets set ALERTS_DEFAULT_RECIPIENTS=rh@empresa.com --project-ref cyjpucvvekzfpvvonuld
 ```
 
-`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_DB_URL` are injected by
-the platform and must not be set by hand.
+`admin-accounts` is what **Configuración → Accesos** calls. Without it that
+screen can still change roles and revoke access -- those are plain RPCs -- but
+cannot create an account or reset a password, because only the Auth Admin API
+can.
+
+```bash
+supabase functions deploy admin-accounts --project-ref cyjpucvvekzfpvvonuld
+```
+
+It takes no secrets of its own. `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_DB_URL` are injected by the platform
+and must not be set by hand.
 
 Draining the queue once, by hand, is the way to prove it works before anything
 is scheduled:

@@ -285,7 +285,7 @@ npm run db:stop
 
 `db:verify` assembles `.local/supabase`, starts an isolated Postgres container,
 replays the immutable migration history over a synthetic shared-schema baseline,
-loads synthetic seed data, and runs the five SQL suites. It does
+loads synthetic seed data, and runs the six SQL suites. It does
 not accept a database URL or a project ref. See
 [docs/local-development.md](docs/local-development.md) for the complete workflow.
 
@@ -416,14 +416,14 @@ short of where the client actually stands.
 | ✅ | `attendance` schema, RLS and privileges |
 | ✅ | Punch engine: state machine, idempotency, append-only, offline |
 | ✅ | Free plan maintenance and backups |
-| ⬜ | User accounts and Auth hardening |
+| ✅ | Account provisioning: create, reset, revoke, with the reason on the record |
 | ✅ | Alert evaluator, thresholds per department, notification outbox |
 | ✅ | Dispatcher Edge Function: drains the outbox over `config_correo` |
 | ✅ | Read API: the contract the PWA is written against |
 | ✅ | PWA: login, punch screen, offline queue, service worker |
 | ✅ | HR board: live team status, open alerts, filters |
 | ✅ | Review: decide a flagged punch or an alert, with the reason on the record |
-| ⬜ | Administration: schedules and alert rules |
+| ✅ | Administration: accounts, schedules and alert rules |
 | ⬜ | Pilot: the PWA deployed, installed on a machine and starting at sign-in |
 
 ### Known debt
@@ -438,10 +438,12 @@ short of where the client actually stands.
   storing the function URL and a key for `pg_net` to use, which is a decision
   about where a credential lives -- so it is its own change, made deliberately,
   not a line appended to this one.
-- **`alert_rules` is empty, so no rule names its recipients.** Every alert
-  therefore falls back to the dispatcher's `ALERTS_DEFAULT_RECIPIENTS` setting,
+- **No rule names its recipients yet.** The seven global rows exist -- the alert
+  evaluation migration seeds them -- but `recipients` is null on every one, so
+  each alert falls back to the dispatcher's `ALERTS_DEFAULT_RECIPIENTS` setting,
   and with that unset the dispatcher refuses to guess and records the failure.
-  The durable fix is one global row in `alert_rules` carrying HR's address.
+  The durable fix is now one field on **Configuración → Alertas**; the screen
+  warns on any active rule that names nobody.
 - **Two applied migrations still describe the old fallback.** The `COMMENT ON`
   for `alert_rules.recipients` says a null uses the defaults in
   `config_correo`, which was written before anyone checked that the only list

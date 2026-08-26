@@ -14,9 +14,14 @@ values
   ('20000000-0000-4000-8000-000000000001', 'Local Engineering', 'America/Mexico_City', true),
   ('20000000-0000-4000-8000-000000000002', 'Local Operations',  'America/Mexico_City', true);
 
+-- Two rows, and the suites depend on it being two: read_api_test.sql asserts
+-- that HR sees everyone by counting them. A suite that needs a third employee
+-- inserts it inside its own transaction.
 insert into public.empleados (
   id,
   nombre,
+  correo,
+  puesto,
   departamento,
   estado,
   department_id,
@@ -26,6 +31,8 @@ values
   (
     '30000000-0000-4000-8000-000000000001',
     'Empleado Local Uno',
+    'local.uno@example.invalid',
+    'Analista',
     'Local Engineering',
     'activo',
     '20000000-0000-4000-8000-000000000001',
@@ -34,6 +41,8 @@ values
   (
     '30000000-0000-4000-8000-000000000002',
     'Empleado Local Dos',
+    'local.dos@example.invalid',
+    'Operador',
     'Local Operations',
     'activo',
     '20000000-0000-4000-8000-000000000002',

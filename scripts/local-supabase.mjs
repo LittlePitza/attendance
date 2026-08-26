@@ -18,6 +18,7 @@ const sqlSuites = [
   'alert_engine_test.sql',
   'read_api_test.sql',
   'review_api_test.sql',
+  'admin_api_test.sql',
   'security_invariants_test.sql',
 ];
 const usage =

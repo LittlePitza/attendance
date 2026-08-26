@@ -1,16 +1,22 @@
 import type { JSX } from 'react';
 import type { Profile } from '../../../lib/types';
-import { IconAlert, IconMark, IconReview, IconSelf, IconTeam } from './icons';
+import { IconAlert, IconMark, IconReview, IconSelf, IconSettings, IconTeam } from './icons';
 
-export type BoardView = 'team' | 'alerts' | 'review';
+export type BoardView = 'team' | 'alerts' | 'review' | 'admin';
 
 /**
  * Where you are, who you are, and whether what you are reading is current.
  *
- * Four destinations, and all four exist: the team, the open alerts, the
- * decisions waiting to be written down, and -- for somebody who is also an
- * employee -- their own day. Nothing here is a placeholder for a screen that
- * has not been built. A nav item that leads nowhere is worse than a short nav.
+ * Five destinations, and all five exist: the team, the open alerts, the
+ * decisions waiting to be written down, the configuration behind all of it, and
+ * -- for somebody who is also an employee -- their own day. Nothing here is a
+ * placeholder for a screen that has not been built. A nav item that leads
+ * nowhere is worse than a short nav.
+ *
+ * Configuration is the one entry that is conditional, and it is a courtesy
+ * rather than a permission: a manager who forced it open would reach a screen
+ * whose every call the database refuses. `list_accounts()` answers HR and admin
+ * and nobody else.
  *
  * The card above the profile is where the reference puts a promotion. It earns
  * the space instead by answering the question a board left open all day
@@ -21,6 +27,7 @@ export function Sidebar({
   onView,
   alertCount,
   reviewCount,
+  canAdminister,
   profile,
   loadedAt,
   online,
@@ -31,6 +38,7 @@ export function Sidebar({
   readonly onView: (next: BoardView) => void;
   readonly alertCount: number;
   readonly reviewCount: number;
+  readonly canAdminister: boolean;
   readonly profile: Profile;
   readonly loadedAt: Date | null;
   readonly online: boolean;
@@ -87,6 +95,18 @@ export function Sidebar({
           Revisión
           {reviewCount > 0 && <span className="side__count">{reviewCount}</span>}
         </button>
+
+        {canAdminister && (
+          <button
+            className={`side__link${view === 'admin' ? ' side__link--on' : ''}`}
+            type="button"
+            onClick={() => onView('admin')}
+            aria-current={view === 'admin' ? 'page' : undefined}
+          >
+            <IconSettings />
+            Configuración
+          </button>
+        )}
       </nav>
 
       <div className="side__status">

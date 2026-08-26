@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { AdminPanel } from '../admin/AdminPanel';
 import { useOnline } from '../../hooks/useOnline';
 import { storedClockSkewMs } from '../../lib/clock';
-import type { Profile, WorkdayState } from '../../lib/types';
+import type { CallerRole, Profile, WorkdayState } from '../../lib/types';
 import { useClockSkew } from '../punch/useClockSkew';
 import { AlertsPanel } from './components/AlertsPanel';
 import { ArrivalsChart } from './components/ArrivalsChart';
@@ -49,6 +50,13 @@ import { useTeamDay } from './useTeamDay';
  * that depends on a schedule, a grace period and a department threshold that
  * only `evaluate_alerts()` resolves. Lateness arrives as an alert.
  */
+/**
+ * Who is offered the configuration screen. It mirrors the gate in
+ * `internal.require_role()` rather than deciding anything: the database refuses
+ * `list_accounts()` to everybody else, so this only chooses what to draw.
+ */
+const CONFIGURING_ROLES: readonly CallerRole[] = ['hr', 'admin'];
+
 export function HrDashboard({
   profile,
   onSignOut,
@@ -159,6 +167,9 @@ export function HrDashboard({
   }
 
   const filtering = state !== 'all' || department !== 'all' || query !== '';
+  // The configuration screen is not a view of a day, so the day's counters and
+  // its toolbar have nothing to say about it.
+  const configuring = view === 'admin';
 
   return (
     <div className={`hr${sidebarOpen ? ' hr--open' : ''}`}>
@@ -167,6 +178,7 @@ export function HrDashboard({
         onView={setView}
         alertCount={alerts.alerts.length}
         reviewCount={summary.needsReview}
+        canAdminister={CONFIGURING_ROLES.includes(profile.role)}
         profile={profile}
         loadedAt={loadedAt}
         online={online}
@@ -186,27 +198,29 @@ export function HrDashboard({
             <IconMenu />
           </button>
 
-          <label className="search">
-            <span className="search__icon">
-              <IconSearch />
-            </span>
-            <span className="sr-only">Buscar por nombre o departamento</span>
-            <input
-              ref={searchRef}
-              className="field"
-              type="search"
-              value={query}
-              placeholder="Buscar…"
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <span className="kbd" aria-hidden="true">
-              ⌘K
-            </span>
-          </label>
+          {!configuring && (
+            <label className="search">
+              <span className="search__icon">
+                <IconSearch />
+              </span>
+              <span className="sr-only">Buscar por nombre o departamento</span>
+              <input
+                ref={searchRef}
+                className="field"
+                type="search"
+                value={query}
+                placeholder="Buscar…"
+                onChange={(event) => setQuery(event.target.value)}
+              />
+              <span className="kbd" aria-hidden="true">
+                ⌘K
+              </span>
+            </label>
+          )}
 
           <span className="topbar__spacer" />
 
-          <div className="panel__tools" role="group" aria-label="Cambiar de día">
+          <div className="panel__tools" role="group" aria-label="Cambiar de día" hidden={configuring}>
             <button
               className="btn btn--icon"
               type="button"
@@ -251,6 +265,7 @@ export function HrDashboard({
             </p>
           )}
 
+          {!configuring && (
           <section className="stats" aria-label="Resumen del día">
             <StatCard
               index={0}
@@ -309,6 +324,7 @@ export function HrDashboard({
               onSelect={() => setView(view === 'alerts' ? 'team' : 'alerts')}
             />
           </section>
+          )}
 
           {view === 'team' ? (
             <>
@@ -403,7 +419,7 @@ export function HrDashboard({
 
               <AlertsPanel alerts={visibleAlerts} timeZone={timeZone} boardDate={shownDate} />
             </section>
-          ) : (
+          ) : view === 'review' ? (
             <ReviewPanel
               team={team}
               alerts={alerts.alerts}
@@ -415,6 +431,8 @@ export function HrDashboard({
               timeZone={timeZone}
               onDecided={afterDecision}
             />
+          ) : (
+            <AdminPanel />
           )}
         </main>
       </div>

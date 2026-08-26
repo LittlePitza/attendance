@@ -159,3 +159,41 @@ export const IconReview = (): JSX.Element => (
     </g>
   </Glyph>
 );
+
+export const IconSettings = (): JSX.Element => (
+  <Glyph>
+    <g>
+      <circle cx="12" cy="12" r="2.8" />
+      <path d="M12 3.5v2.2M12 18.3v2.2M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M3.5 12h2.2M18.3 12h2.2M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6" />
+    </g>
+  </Glyph>
+);
+
+export const IconKey = (): JSX.Element => (
+  <Glyph>
+    <g>
+      <circle cx="8" cy="16" r="3.2" />
+      <path d="m10.3 13.7 7.2-7.2" />
+      <path d="m15.4 8.6 2 2" />
+      <path d="m18 6 2 2" />
+    </g>
+  </Glyph>
+);
+
+export const IconClock = (): JSX.Element => (
+  <Glyph>
+    <g>
+      <circle cx="12" cy="12" r="8.2" />
+      <path d="M12 7.6V12l3.1 1.9" />
+    </g>
+  </Glyph>
+);
+
+export const IconCopy = (): JSX.Element => (
+  <Glyph>
+    <g>
+      <rect x="9" y="9" width="11" height="11" rx="1.8" />
+      <path d="M15 6.5A1.5 1.5 0 0 0 13.5 5h-7A1.5 1.5 0 0 0 5 6.5v7A1.5 1.5 0 0 0 6.5 15" />
+    </g>
+  </Glyph>
+);

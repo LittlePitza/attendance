@@ -1,0 +1,391 @@
+/*
+ * The administration screen.
+ *
+ * It borrows the board's tokens rather than defining its own -- `.hr` is its
+ * ancestor, so `--card`, `--line` and the rest are already in scope, and a
+ * second palette here would be a second thing to keep in step. What it adds is
+ * the one thing the board has no shape for: forms. The board displays; this
+ * screen is the only place in the client where somebody types.
+ *
+ * The `.btn--danger` variant lives here rather than in `hr.css` because this is
+ * where the only destructive actions are. Retiring a schedule and revoking
+ * access are the two things on any screen that somebody should have to mean.
+ */
+
+.admin {
+  display: grid;
+  gap: 1rem;
+}
+
+/* --------------------------------------------------------------- tabs --- */
+
+.admin__tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.admin__tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-weight: 500;
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.admin__tab:hover {
+  color: var(--ink);
+}
+
+.admin__tab--on {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+/* -------------------------------------------------------------- layout --- */
+
+/*
+ * A list and the thing it selects, side by side. Below 62rem they stack, which
+ * is the width at which a list of names and a form of six time fields stop both
+ * being readable -- HR reads this on a laptop, not only at a desk.
+ */
+.admin__split {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (min-width: 62rem) {
+  .admin__split {
+    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+  }
+}
+
+.admin__list {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem;
+  display: grid;
+  gap: 0.25rem;
+  max-height: 32rem;
+  overflow-y: auto;
+}
+
+.admin__pick {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.admin__pick:hover {
+  background: var(--sunken);
+}
+
+.admin__pick--on {
+  background: var(--sunken);
+  border-color: var(--edge);
+}
+
+.admin__pick-main {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.admin__pick-name {
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin__pick .muted {
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin__retired {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.8125rem;
+}
+
+.admin__retired li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* --------------------------------------------------------------- forms --- */
+
+.admin__form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.admin__field {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+/*
+ * The <label> wraps its text and its control and nothing else. A hint inside it
+ * becomes part of the control's accessible name -- "Rol Su departamento" -- so
+ * hints sit outside, as a sibling within the same grid.
+ */
+.admin__labelled {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.admin__field--narrow {
+  max-width: 7rem;
+}
+
+.admin__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.admin__hint {
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+  margin: 0;
+}
+
+.admin__hint--warn {
+  color: var(--warn);
+}
+
+.admin__reason {
+  font: inherit;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.6rem;
+  resize: vertical;
+}
+
+.admin__reason:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.admin__grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.admin__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin__facts {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.admin__facts dt {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.admin__facts dd {
+  margin: 0.1rem 0 0;
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------- days --- */
+
+.admin__days {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.admin__days legend {
+  width: 100%;
+}
+
+.admin__day {
+  appearance: none;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 50%;
+  border: 1px solid var(--edge);
+  background: var(--card);
+  color: var(--ink-soft);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin__day--on {
+  background: var(--solid);
+  border-color: var(--solid);
+  color: var(--solid-ink);
+}
+
+.admin__days .admin__hint {
+  margin-left: 0.4rem;
+}
+
+/* --------------------------------------------------------------- rules --- */
+
+.admin__rules {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.admin__rule {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.8rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.admin__rule--off {
+  background: var(--sunken);
+  color: var(--ink-soft);
+}
+
+.admin__rule-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.admin__rule-name {
+  font-weight: 600;
+}
+
+.admin__rule-head .admin__toggle {
+  margin-left: auto;
+}
+
+.admin__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.admin__rule-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.6rem;
+}
+
+.admin__rule-body .admin__field:not(.admin__field--narrow) {
+  flex: 1 1 16rem;
+}
+
+/* ------------------------------------------------------------- handout --- */
+
+/*
+ * The one moment a credential is on screen. Warm rather than alarming: it is
+ * not an error, it is something to read out loud once and then never again.
+ */
+.admin__handout {
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.8rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.admin__handout-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--warn);
+}
+
+.admin__handout-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin__secret {
+  font-family: var(--mono);
+  font-size: 1.15rem;
+  letter-spacing: 0.06em;
+  background: var(--card);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.6rem;
+  user-select: all;
+}
+
+.admin__handout .admin__hint {
+  color: var(--warn);
+}
+
+/* -------------------------------------------------------------- danger --- */
+
+.btn--danger {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: var(--bad-soft);
+}
