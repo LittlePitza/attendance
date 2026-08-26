@@ -1,6 +1,55 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Checador">
-  <rect width="512" height="512" fill="#0f172a" />
-  <circle cx="256" cy="256" r="118" fill="none" stroke="#38bdf8" stroke-width="24" />
-  <path d="M256 179v79l55 34" fill="none" stroke="#e2e8f0" stroke-width="24"
-        stroke-linecap="round" stroke-linejoin="round" />
+  <!--
+    The same icon, drawn for a platform that will crop it.
+
+    A maskable icon is guaranteed to keep only the middle 80% -- the safe zone
+    is a circle of radius 205 around the centre -- and everything outside it may
+    be cut away to whatever shape the operating system prefers. So the ground
+    is a full square with no rounded corners of its own, and the mark is drawn
+    smaller than in `icon.svg` so the outermost rays stay well inside that
+    circle rather than being trimmed to stubs on a device that crops hard.
+  -->
+  <defs>
+    <radialGradient id="violet" cx="26%" cy="24%" r="62%">
+      <stop offset="0%" stop-color="#c9b8ff" />
+      <stop offset="100%" stop-color="#c9b8ff" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="pink" cx="80%" cy="20%" r="58%">
+      <stop offset="0%" stop-color="#ffb8d9" />
+      <stop offset="100%" stop-color="#ffb8d9" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="sky" cx="72%" cy="82%" r="68%">
+      <stop offset="0%" stop-color="#a8c8ff" />
+      <stop offset="100%" stop-color="#a8c8ff" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="peach" cx="18%" cy="84%" r="52%">
+      <stop offset="0%" stop-color="#ffd7a8" />
+      <stop offset="100%" stop-color="#ffd7a8" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="#fbfaf9" />
+  <rect width="512" height="512" fill="url(#violet)" />
+  <rect width="512" height="512" fill="url(#pink)" />
+  <rect width="512" height="512" fill="url(#sky)" />
+  <rect width="512" height="512" fill="url(#peach)" />
+
+  <g stroke="#17171a" stroke-width="14" stroke-linecap="round" fill="none">
+    <g>
+      <path d="M256 128v37" />
+      <path d="M320 145.2 301.6 177" />
+      <path d="M366.8 192 335 210.4" />
+      <path d="M384 256h-37" />
+      <path d="M366.8 320 335 301.6" />
+      <path d="M320 366.8 301.6 335" />
+      <path d="M256 384v-37" />
+      <path d="M192 366.8 210.4 335" />
+      <path d="M145.2 320 177 301.6" />
+      <path d="M128 256h37" />
+      <path d="M145.2 192 177 210.4" />
+      <path d="M192 145.2 210.4 177" />
+    </g>
+    <circle cx="256" cy="256" r="62" stroke-width="17" />
+    <path d="M256 216v40l27 17" stroke-width="17" stroke-linejoin="round" />
+  </g>
 </svg>

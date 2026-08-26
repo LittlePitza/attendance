@@ -1,6 +1,67 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Checador">
-  <rect width="512" height="512" rx="96" fill="#0f172a" />
-  <circle cx="256" cy="256" r="150" fill="none" stroke="#38bdf8" stroke-width="28" />
-  <path d="M256 158v104l70 44" fill="none" stroke="#e2e8f0" stroke-width="28"
-        stroke-linecap="round" stroke-linejoin="round" />
+  <!--
+    The installed application's icon. It carries the same two things the sign-in
+    page does -- the mesh and the burst mark -- because the icon on a taskbar is
+    the first half of recognising the application and the sign-in page is the
+    second, and they should not look like two products.
+
+    The mesh is four soft radial stops rather than the five drifting shapes the
+    page uses: at 32 pixels on a taskbar, five is mud. The mark is drawn in the
+    same near-black as the interface, on the same pale ground.
+
+    Deliberately not a photograph of the page. An icon is read at a size where
+    detail is noise, so what survives here is the palette and the silhouette.
+  -->
+  <defs>
+    <radialGradient id="violet" cx="26%" cy="24%" r="62%">
+      <stop offset="0%" stop-color="#c9b8ff" />
+      <stop offset="100%" stop-color="#c9b8ff" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="pink" cx="80%" cy="20%" r="58%">
+      <stop offset="0%" stop-color="#ffb8d9" />
+      <stop offset="100%" stop-color="#ffb8d9" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="sky" cx="72%" cy="82%" r="68%">
+      <stop offset="0%" stop-color="#a8c8ff" />
+      <stop offset="100%" stop-color="#a8c8ff" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="peach" cx="18%" cy="84%" r="52%">
+      <stop offset="0%" stop-color="#ffd7a8" />
+      <stop offset="100%" stop-color="#ffd7a8" stop-opacity="0" />
+    </radialGradient>
+    <clipPath id="rounded">
+      <rect width="512" height="512" rx="112" />
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#rounded)">
+    <rect width="512" height="512" fill="#fbfaf9" />
+    <rect width="512" height="512" fill="url(#violet)" />
+    <rect width="512" height="512" fill="url(#pink)" />
+    <rect width="512" height="512" fill="url(#sky)" />
+    <rect width="512" height="512" fill="url(#peach)" />
+  </g>
+
+  <!--
+    Twelve rays rather than the interface's twenty-four: at icon sizes the
+    finer burst closes up into a ring and stops reading as rays at all.
+  -->
+  <g stroke="#17171a" stroke-width="17" stroke-linecap="round" fill="none">
+    <g>
+      <path d="M256 96v46" />
+      <path d="M336 117.4 313 157.2" />
+      <path d="M394.6 176 354.8 199" />
+      <path d="M416 256h-46" />
+      <path d="M394.6 336 354.8 313" />
+      <path d="M336 394.6 313 354.8" />
+      <path d="M256 416v-46" />
+      <path d="M176 394.6 199 354.8" />
+      <path d="M117.4 336 157.2 313" />
+      <path d="M96 256h46" />
+      <path d="M117.4 176 157.2 199" />
+      <path d="M176 117.4 199 157.2" />
+    </g>
+    <circle cx="256" cy="256" r="78" stroke-width="21" />
+    <path d="M256 206v50l34 21" stroke-width="21" stroke-linejoin="round" />
+  </g>
 </svg>

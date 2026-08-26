@@ -285,7 +285,7 @@ npm run db:stop
 
 `db:verify` assembles `.local/supabase`, starts an isolated Postgres container,
 replays the immutable migration history over a synthetic shared-schema baseline,
-loads synthetic seed data, and runs the six SQL suites. It does
+loads synthetic seed data, and runs the seven SQL suites. It does
 not accept a database URL or a project ref. See
 [docs/local-development.md](docs/local-development.md) for the complete workflow.
 

@@ -194,11 +194,29 @@ renders immediately either way, and the service worker caches the files after
 the first visit so a later offline launch still gets them. Nothing depends on
 the font arriving.
 
-**The board is light and the punch screen is dark**, which is not an oversight
-either. They are different surfaces: a phone held for five seconds at the start
-of a shift, and a desktop grid left open all day. They share `lib/` and share
-nothing visual, which is why `hr.css` defines its own components instead of
-recolouring the ones in `app.css`.
+**Both surfaces are light, and the punch screen did not used to be.** It was
+dark on the argument that it was a phone held for five seconds at the start of a
+shift. The pilot said otherwise: it is installed on work machines and left open
+all day beside everything else the person uses, and a dark slab in that company
+reads as something that is broken. They now share a palette and a typeface.
+
+They still **share no components**, and that part was never about colour.
+`hr.css` is a dense grid read at a desk; `app.css` is a five-second interaction
+with thumb-sized targets. One `.card` meaning two things is how a shared
+stylesheet goes wrong, so the two files name their own -- `.panel` and `.btn` on
+one side, `.card` and `.button` on the other. Where a name did collide, it was
+renamed rather than reconciled: `app.css` calls its top bar `.appbar` and its
+icons `.ico` precisely because `hr.css` already had a `.topbar` and a `.glyph`
+that meant something else. **`web/src/features/hr/components/icons.tsx` and
+`web/src/features/shell/icons.tsx` are two sets on purpose** for the same
+reason.
+
+**The mesh is the one decorative thing in the application**, and it earns its
+place: it is what makes the sign-in page recognisable before a word of it has
+been read. It is five blurred divs, not an image -- nothing to cache, nothing to
+fetch, and it adapts to the shape of whatever panel it fills. Under
+`prefers-reduced-motion` it stops drifting and stays a gradient: the setting
+asks for less movement, not for less design.
 
 **It is served from Vercel, and `web/vercel.json` is part of it.** Root
 Directory is `web`; everything else -- build command, output directory, cache
@@ -225,6 +243,79 @@ the name Windows files the installed application under, and the Edge policy that
 makes it start at sign-in is keyed by it rather than by the URL. A new value is
 a new application to the operating system: the old one stays installed, the
 policy matches nothing, and nobody is told.
+
+## The access log
+
+`attendance.app_sessions` answers a question `attendance.devices` never could:
+**when did somebody start using the application, from where, and when did they
+stop.** The devices table keeps one row per machine with a `last_seen_at` that
+is overwritten, which is right for what it is for -- revoking a lost laptop --
+and means yesterday's session is gone the moment today's begins. This is a row
+per session.
+
+Three functions write it and both readers are invoker, like everything else that
+only reads:
+
+| Call | When | Who decides |
+|---|---|---|
+| `open_session()` | the application starts | the database: reload, relaunch or a new session |
+| `touch_session()` | every 5 minutes | it answers `active: false` once swept |
+| `close_session()` | sign-out, and `pagehide` | idempotent: the first close wins |
+| `attendance.expire_stale_sessions()` | cron, every 30 min | closes what stopped reporting |
+
+**The client decides none of it.** It reports, and reports again. Whether a
+reload is a new session, when a quiet machine counts as gone, and what hour a
+session that never said goodbye ended at are all resolved in
+`public.open_session()` -- which is why opening twice produces one row, why a
+window closed and reopened within two minutes rejoins the session it left, and
+why a machine quiet for more than two hours starts a new one.
+
+**A session that was never closed is stamped at `last_seen_at`, never at
+`now()`.** The last thing anybody knows is the last report; stamping the moment
+the sweeper happened to run would credit somebody with every hour they were not
+there. That is the single most important line in the whole feature, and
+`sessions_api_test.sql` asserts it directly.
+
+**Closing is best effort, and that is accounted for rather than hoped over.**
+`pagehide` gives no chance to await anything, so the close goes out through
+`fetch` with `keepalive` -- the one request in the application that does not go
+through `supabase-js`, because `sendBeacon` cannot carry an `Authorization`
+header and PostgREST will not take the call without one. A machine that loses
+power never reaches it. The sweeper is what makes that a loss of precision
+instead of a loss of the row.
+
+**"Where" is the request IP and the zone the device reports.** Both arrive with
+the request and need nobody's permission. Coordinates are a different thing
+entirely and are deliberately not here: `attendance.consents`, the 90-day
+`geo_purge_on` and the discard-without-consent branch in `record_punch()` are
+already built for them, and switching them on means a consent screen and an edit
+to `Permissions-Policy` in `web/vercel.json`. That is a privacy decision, so it
+is its own change rather than a column added quietly to this one.
+
+**The employee can read their own log**, on their own screen, without asking
+anybody. That is the point rather than a feature: a log only management can read
+is a log the people in it have no way to check.
+
+## What the employee's screen may work out
+
+Nothing. `my_summary()` decides hours against expected, punctuality, the streak
+and the average entry, for the same reason the board never works out who was
+late -- and it counts `late_entry` alerts rather than re-deriving lateness from
+the hour, because the schedule, the grace period and the department threshold
+are all resolved in `attendance.evaluate_alerts()` and nowhere else. **An alert
+HR dismissed stops counting**, or the decision would mean nothing.
+
+`my_day()` carries the same idea into the running counter. The engine
+accumulates by difference at each punch, so `worked_seconds` is genuinely zero
+four hours into a shift with no break -- correct, and unreadable. So `my_day()`
+also reports `counting`, `counting_since` and the two `*_live` totals, and the
+screen ticks forward from the moment the answer arrived. It never decides which
+counter a break belongs to.
+
+It measures from **when the answer landed**, not from the `server_time` in it:
+only the difference between two readings of one clock is used, so a laptop whose
+clock is an hour out still counts the seconds of a shift correctly.
+
 
 ## Language
 
@@ -317,17 +408,22 @@ ignored globally and never appears in `git status`.
 
    What **does** live in `public` on purpose, because the client has to call it
    over REST: `my_profile()`, `server_time()`, `punch()`, `sync_punches()`,
-   `heartbeat()`, `my_day()`, `my_history()`, `team_day()` and `open_alerts()`.
-   The advisors flag `punch`, `sync_punches` and `heartbeat` as "SECURITY
-   DEFINER executable by authenticated": **that is the design**, not a finding.
-   They are the only write path, so they must elevate privileges.
+   `heartbeat()`, `open_session()`, `touch_session()`, `close_session()`,
+   `my_day()`, `my_history()`, `my_summary()`, `my_sessions()`, `team_day()`,
+   `open_alerts()` and `employee_sessions()` -- plus the review and
+   administration functions HR reaches.
+
+   The advisors flag `punch`, `sync_punches`, `heartbeat` and the three session
+   writers as "SECURITY DEFINER executable by authenticated": **that is the
+   design**, not a finding. They are the only write path, so they must elevate
+   privileges.
 
 8. **Wrap calls in `(select ...)` inside RLS policies**:
    `using ((select internal.caller_role()) = 'admin')`. That way Postgres
    evaluates them once per statement instead of once per row.
 
-9. **Writes elevate; reads do not.** The four read functions are `SECURITY
-   INVOKER`, and adding a fifth that is `DEFINER` needs a reason written down.
+9. **Writes elevate; reads do not.** Every read function is `SECURITY
+   INVOKER`, and adding one that is `DEFINER` needs a reason written down.
    `internal.can_view_employee()` already decides who sees whom and the column
    grants already withhold `geo_lat` and `geo_lng`; a read function that
    elevated would have to reimplement both and could get either wrong quietly.
@@ -465,7 +561,7 @@ cd supabase/functions && deno test --filter "recipient"
 ```
 
 **The SQL suites are the exception: there is no way to run one.**
-`npm run db:test` runs all six, because the wrapper takes a single known
+`npm run db:test` runs all seven, because the wrapper takes a single known
 action and rejects every additional argument -- which is the same property that
 stops a suite being pointed at a different database by accident. Narrow inside
 the file instead.
@@ -473,7 +569,7 @@ the file instead.
 `npm test` verifies the assembler, command allowlist, local-only configuration,
 portable CLI launcher and documentation guardrails. `npm run db:verify` then
 builds `.local/supabase`, starts local Postgres, resets it from all migrations
-and synthetic fixtures, and runs the six SQL suites.
+and synthetic fixtures, and runs the seven SQL suites.
 
 The wrapper accepts one known action and constructs every Supabase argument
 itself. There is no `--db-url`, link command, project selector or remote fallback.
@@ -490,7 +586,7 @@ boundary for an operating database.
 npm run db:prepare  # assemble the ignored local workspace
 npm run db:start    # start only the local database service
 npm run db:reset    # replay migrations and synthetic seed locally
-npm run db:test     # punch, alert, read, review, admin and security SQL suites
+npm run db:test     # punch, alert, read, review, admin, sessions and security suites
 npm run db:verify   # start, reset and test in one command
 npm run db:stop     # stop this repository's local stack
 ```
@@ -582,6 +678,10 @@ select tablename, policyname, cmd from pg_policies
   **Configuración → Accesos**. The agreement was to start with 2 or 3. Until an
   account exists a person cannot punch, and `evaluate_alerts()` does not look at
   them -- so onboarding somebody is also what puts them under watch.
+- **The access log records where by IP, not by coordinates.** Turning on real
+  geolocation means a consent screen, a row in `attendance.consents`, and
+  changing `Permissions-Policy` in `web/vercel.json` in the same commit. The
+  storage and the 90-day purge already exist; the consent flow does not.
 - **There is no leave or absence table.** Somebody on holiday collects a
   `missing_entry` every day until one exists, and HR dismisses each by hand on
   **Revisión**. Closing it is one extra condition inside `evaluate_alerts()`, not

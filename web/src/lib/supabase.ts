@@ -22,17 +22,28 @@ function requireEnv(name: string, value: string | undefined): string {
   return value;
 }
 
-export const supabase = createClient(
-  requireEnv('VITE_SUPABASE_URL', import.meta.env.VITE_SUPABASE_URL),
-  requireEnv('VITE_SUPABASE_PUBLISHABLE_KEY', import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY),
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      // There is no magic link and no OAuth provider: nothing ever arrives in
-      // the URL, so there is no reason to parse it. Signup is closed; HR
-      // creates the accounts.
-      detectSessionInUrl: false,
-    },
-  },
+/**
+ * The same two values the client is built from, exported because one call
+ * cannot go through the client at all.
+ *
+ * Closing the access log on `pagehide` has to survive the page being torn down,
+ * which means `fetch` with `keepalive`. `supabase-js` does not offer that, so
+ * that one request is assembled by hand against these -- see
+ * `lib/session.ts`. Nothing else should reach for them.
+ */
+export const SUPABASE_URL = requireEnv('VITE_SUPABASE_URL', import.meta.env.VITE_SUPABASE_URL);
+export const SUPABASE_PUBLISHABLE_KEY = requireEnv(
+  'VITE_SUPABASE_PUBLISHABLE_KEY',
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
 );
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    // There is no magic link and no OAuth provider: nothing ever arrives in
+    // the URL, so there is no reason to parse it. Signup is closed; HR
+    // creates the accounts.
+    detectSessionInUrl: false,
+  },
+});
