@@ -5,6 +5,16 @@ import type { MyDay } from '../../lib/types';
 
 export interface MyDayState {
   readonly day: MyDay | null;
+  /**
+   * The device's clock at the moment this answer landed.
+   *
+   * The running counter is measured from here rather than from the answer's
+   * `server_time`, so only the difference between two readings of one clock is
+   * ever used. A laptop whose clock is an hour out still counts the seconds of
+   * a shift correctly, because every clock is right about elapsed time even
+   * when it is wrong about the hour.
+   */
+  readonly fetchedAt: number;
   readonly error: string | null;
   readonly loading: boolean;
   readonly refresh: () => Promise<void>;
@@ -23,12 +33,17 @@ export interface MyDayState {
  */
 export function useMyDay(): MyDayState {
   const [day, setDay] = useState<MyDay | null>(null);
+  const [fetchedAt, setFetchedAt] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
-      setDay(await api.myDay());
+      const fresh = await api.myDay();
+      // Stamped after the await, so it is the moment the answer arrived rather
+      // than the moment it was asked for.
+      setFetchedAt(Date.now());
+      setDay(fresh);
       setError(null);
     } catch (failure) {
       if (failure instanceof NetworkUnavailableError) {
@@ -60,5 +75,5 @@ export function useMyDay(): MyDayState {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [refresh]);
 
-  return { day, error, loading, refresh };
+  return { day, fetchedAt, error, loading, refresh };
 }

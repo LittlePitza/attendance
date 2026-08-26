@@ -1,6 +1,8 @@
 import { useId, useState, type FormEvent, type JSX } from 'react';
 import { api } from '../../lib/api';
 import { describeReadFailure } from '../../lib/errors';
+import { IconEye, IconLock } from '../shell/icons';
+import { AuthLayout } from './AuthLayout';
 
 /**
  * The minimum this project settled on.
@@ -33,12 +35,18 @@ export function ChoosePasswordScreen({
 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [revealed, setRevealed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const tooShort = password !== '' && password.length < MIN_LENGTH;
   const mismatched = confirm !== '' && confirm !== password;
   const ready = password.length >= MIN_LENGTH && confirm === password && !busy;
+
+  // Clamped at the minimum rather than the strongest password imaginable: the
+  // bar is twelve characters, and a meter that stays a third full after
+  // somebody clears the bar is telling them they failed when they did not.
+  const filled = Math.min(1, password.length / MIN_LENGTH);
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -57,51 +65,70 @@ export function ChoosePasswordScreen({
   }
 
   return (
-    <main className="screen screen--centered">
-      <form className="card login" onSubmit={(event) => void submit(event)}>
-        <h1 className="login__title">Elige tu contraseña</h1>
-        <p className="login__subtitle">
-          La que te dieron es temporal y Recursos Humanos la conoce. Cuando elijas la tuya, nadie
-          más la sabrá.
-        </p>
-
-        <label className="field" htmlFor={passwordId}>
-          <span className="field__label">Nueva contraseña</span>
-          <input
-            id={passwordId}
-            className="field__input"
-            type="password"
-            name="new-password"
-            autoComplete="new-password"
-            required
-            minLength={MIN_LENGTH}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </label>
-
-        <label className="field" htmlFor={confirmId}>
-          <span className="field__label">Repítela</span>
-          <input
-            id={confirmId}
-            className="field__input"
-            type="password"
-            name="confirm-password"
-            autoComplete="new-password"
-            required
-            value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
-          />
+    <AuthLayout
+      title="Elige tu contraseña"
+      subtitle="La que te dieron es temporal y Recursos Humanos la conoce. Cuando elijas la tuya, nadie más la sabrá."
+    >
+      <form className="form" onSubmit={(event) => void submit(event)} noValidate>
+        <label className="entry" htmlFor={passwordId}>
+          <span className="entry__label">Nueva contraseña</span>
+          <span className="entry__box">
+            <span className="entry__icon">
+              <IconLock />
+            </span>
+            <input
+              id={passwordId}
+              className="entry__input"
+              type={revealed ? 'text' : 'password'}
+              name="new-password"
+              autoComplete="new-password"
+              required
+              minLength={MIN_LENGTH}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+            <button
+              className="entry__reveal"
+              type="button"
+              onClick={() => setRevealed((shown) => !shown)}
+              aria-label={revealed ? 'Ocultar la contraseña' : 'Mostrar la contraseña'}
+              aria-pressed={revealed}
+            >
+              <IconEye open={revealed} />
+            </button>
+          </span>
         </label>
 
         {/* Said before the attempt, not after it: the rule is not a surprise. */}
+        <div className="meter" aria-hidden="true">
+          <span className="meter__fill" style={{ scale: `${String(filled)} 1` }} />
+        </div>
         <p className="muted">
           {tooShort
             ? `Te faltan ${String(MIN_LENGTH - password.length)} caracteres.`
-            : mismatched
-              ? 'Las dos no coinciden.'
-              : `Al menos ${String(MIN_LENGTH)} caracteres.`}
+            : `Al menos ${String(MIN_LENGTH)} caracteres.`}
         </p>
+
+        <label className="entry" htmlFor={confirmId}>
+          <span className="entry__label">Repítela</span>
+          <span className="entry__box">
+            <span className="entry__icon">
+              <IconLock />
+            </span>
+            <input
+              id={confirmId}
+              className="entry__input"
+              type={revealed ? 'text' : 'password'}
+              name="confirm-password"
+              autoComplete="new-password"
+              required
+              value={confirm}
+              onChange={(event) => setConfirm(event.target.value)}
+            />
+          </span>
+        </label>
+
+        {mismatched && <p className="muted">Las dos no coinciden.</p>}
 
         {error !== null && (
           <p className="notice notice--error" role="alert">
@@ -109,14 +136,14 @@ export function ChoosePasswordScreen({
           </p>
         )}
 
-        <button className="button button--primary" type="submit" disabled={!ready}>
+        <button className="button button--primary button--block" type="submit" disabled={!ready}>
           {busy ? 'Guardando…' : 'Guardar y continuar'}
         </button>
 
-        <button className="button button--quiet" type="button" onClick={onSignOut}>
+        <button className="button button--quiet button--block" type="button" onClick={onSignOut}>
           Salir
         </button>
       </form>
-    </main>
+    </AuthLayout>
   );
 }

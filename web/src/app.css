@@ -1,28 +1,78 @@
 /*
- * One stylesheet, no framework.
+ * The employee-facing application: sign-in, the temporary-password wall and the
+ * punch screen.
  *
- * The application is four screens' worth of markup used by people on phones,
- * often in a hurry at the start of a shift. What it needs is large targets,
- * readable contrast and nothing that shifts under a thumb -- none of which
- * needs a dependency to keep current.
+ * One stylesheet, no framework. The whole surface is three screens used by
+ * people who are usually in a hurry, half of them on a phone and half on a
+ * desktop that launched it at sign-in, and what it needs is large targets,
+ * readable contrast and nothing that moves under a thumb -- none of which needs
+ * a dependency to keep current.
+ *
+ * It is light, and it did not used to be. The punch screen was dark on the
+ * argument that it was a phone held for five seconds; in the pilot it turned
+ * out to be a window open all day on a work machine beside everything else the
+ * person uses, and a dark slab in that company reads as something that is
+ * broken. The board in `hr.css` is still a separate stylesheet with its own
+ * components -- the two surfaces now share a palette and a typeface, but a
+ * dense grid read at a desk and a five-second interaction still want different
+ * components, and one `.card` meaning two things is how that goes wrong.
+ *
+ * The mesh is the one decorative element and it earns its place: it is what
+ * makes the sign-in page recognisable at a glance, and it is five divs and a
+ * blur rather than an image to cache, a font to load or a library to audit.
  */
 
 :root {
-  --ink: #e2e8f0;
-  --ink-muted: #94a3b8;
-  --surface: #0f172a;
-  --surface-raised: #1e293b;
-  --line: #334155;
-  --accent: #38bdf8;
-  --accent-ink: #082f49;
-  --ok: #4ade80;
-  --warning: #fbbf24;
-  --error: #f87171;
+  /* ------------------------------------------------------------- ground --- */
+  --paper: #fbfaf9;
+  --card: #ffffff;
+  --sunken: #f6f5f3;
+  --line: #e8e6e2;
+  --line-soft: #f1efec;
+
+  --ink: #17171a;
+  --ink-soft: #6b6b70;
+  --ink-faint: #9b9ba1;
+
+  --solid: #17171a;
+  --solid-ink: #ffffff;
+
+  /* Semantic only. Colour appears where it encodes state and nowhere else,
+   * which is what keeps the few places that are coloured readable as
+   * information rather than as styling. */
+  --good: #15803d;
+  --good-soft: #dcfce7;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --bad: #b91c1c;
+  --bad-soft: #fee2e2;
+  --info: #1d4ed8;
+  --info-soft: #dbeafe;
+
+  /* The one hue that is not semantic: it ties the ring and the bars to the
+   * mesh, so the application looks like one thing. */
+  --accent: #6d5efc;
+  --accent-soft: #ece9ff;
+
+  /* The mesh, and the icon, and nothing else. */
+  --mesh-violet: #c9b8ff;
+  --mesh-pink: #ffb8d9;
+  --mesh-sky: #a8c8ff;
+  --mesh-peach: #ffd7a8;
+  --mesh-aqua: #b6f0ea;
 
   --radius: 14px;
+  --radius-sm: 10px;
+  --radius-lg: 20px;
+  --shadow: 0 1px 2px rgb(23 23 26 / 5%);
+  --shadow-lift: 0 6px 24px rgb(23 23 26 / 7%);
+
+  --sans: 'Geist', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', monospace;
+
   --gap: 1rem;
 
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * {
@@ -33,192 +83,1106 @@ html,
 body {
   margin: 0;
   min-height: 100dvh;
-  background: var(--surface);
+  background: var(--paper);
   color: var(--ink);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--sans);
   font-size: 16px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
   /* Respects the reader's own font size instead of overriding it. */
   -webkit-text-size-adjust: 100%;
 }
 
-.screen {
+/* Geist Mono slashes its zero by default. That is a convention for reading
+ * code, and these are times and durations read by people for whom a slashed
+ * zero is an unfamiliar glyph in the middle of an hour. */
+body {
+  font-feature-settings: 'zero' 0;
+}
+
+.ico {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: none;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.muted {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.blank {
+  margin: 0;
+  padding: 1.25rem 0;
+  color: var(--ink-faint);
+  text-align: center;
+}
+
+/* ==================================================================== mesh ===
+ * Five blurred shapes drifting behind the content. `filter: blur()` on a small
+ * number of elements is composited, so this costs a phone essentially nothing
+ * while it sits there -- which is the whole reason it is not an image.
+ */
+
+.mesh {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.mesh__blob {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--size);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 50%;
+  filter: blur(48px);
+  animation: drift var(--duration) var(--delay) ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.mesh__blob--violet { background: var(--mesh-violet); }
+.mesh__blob--pink   { background: var(--mesh-pink); }
+.mesh__blob--sky    { background: var(--mesh-sky); }
+.mesh__blob--peach  { background: var(--mesh-peach); }
+.mesh__blob--aqua   { background: var(--mesh-aqua); }
+
+@keyframes drift {
+  from { transform: translate(-6%, 4%) scale(1); }
+  to   { transform: translate(8%, -7%) scale(1.18); }
+}
+
+/* Saturated: on the sign-in page the mesh is the surface, not a backdrop. */
+.mesh--panel .mesh__blob {
+  opacity: 0.9;
+  filter: blur(56px);
+}
+
+/* Faint: text sits on top of this one, and legibility outranks the effect. */
+.mesh--wash .mesh__blob {
+  opacity: 0.42;
+  filter: blur(64px);
+}
+
+/* ============================================================ application ===
+ * The signed-in shell. `.app` is a column with a readable maximum; the punch
+ * screen widens into two columns inside it.
+ */
+
+.app {
   display: flex;
   flex-direction: column;
   gap: var(--gap);
   margin-inline: auto;
-  max-width: 32rem;
-  padding: max(1rem, env(safe-area-inset-top)) 1rem calc(1rem + env(safe-area-inset-bottom));
+  max-width: 74rem;
+  padding: max(1rem, env(safe-area-inset-top)) 1.25rem calc(2rem + env(safe-area-inset-bottom));
 }
 
-.screen--centered {
+.app--centered {
+  align-items: center;
   justify-content: center;
   min-height: 100dvh;
 }
 
-.header {
+.appbar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
+  gap: var(--gap);
+  flex-wrap: wrap;
+  padding-block: 0.25rem 0.5rem;
+}
+
+.appbar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.appbar__mark {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 8px;
+  background: var(--solid);
+  color: var(--solid-ink);
+}
+
+.appbar__mark .ico {
+  width: 1.0625rem;
+  height: 1.0625rem;
+}
+
+.appbar__side {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* ----------------------------------------------------------------- pills --- */
+
+.signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.signal--live {
+  background: var(--good-soft);
+  color: var(--good);
+}
+
+.signal--off {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.signal__dot {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+.signal--live .signal__dot {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.82); }
+}
+
+/* =================================================================== grid ===
+ * One column on a phone, two from 62rem: the day on the left, the record on
+ * the right. The breakpoint is where the right-hand column stops squeezing the
+ * ring and the buttons rather than a device width.
+ */
+
+.grid {
+  display: grid;
   gap: var(--gap);
 }
 
-.header__title {
-  margin: 0;
-  font-size: 1.5rem;
+.grid__main,
+.grid__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-width: 0;
 }
 
-.header__date {
-  margin: 0.15rem 0 0;
-  color: var(--ink-muted);
-  /* The weekday arrives lowercase from Intl in Spanish. */
-  text-transform: capitalize;
+@media (min-width: 62rem) {
+  .grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    align-items: start;
+  }
 }
+
+/* =================================================================== card === */
 
 .card {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--surface-raised);
+  background: var(--card);
+  box-shadow: var(--shadow);
   padding: 1.25rem;
+  animation: appear 420ms ease-out both;
+}
+
+.card--message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  align-items: flex-start;
+  max-width: 30rem;
 }
 
 .card__title {
   margin: 0 0 0.75rem;
-  font-size: 1rem;
+  font-size: 0.9375rem;
   font-weight: 600;
+  letter-spacing: -0.005em;
 }
 
-.state__label {
-  margin: 0;
-  font-size: 1.75rem;
-  font-weight: 700;
+.card__note {
+  margin: -0.5rem 0 0.9rem;
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
 }
 
-.counters {
+@keyframes appear {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* =================================================================== hero ===
+ * The top of the punch screen, and the only part that matters if somebody
+ * reads nothing else.
+ */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-lift);
+  padding: 1.5rem;
   display: flex;
-  gap: 2rem;
-  margin: 1rem 0;
+  flex-direction: column;
+  gap: 1.5rem;
+  animation: appear 480ms ease-out both;
 }
 
-.counter dt {
-  color: var(--ink-muted);
-  font-size: 0.875rem;
+.hero > *:not(.mesh) {
+  position: relative;
 }
 
-.counter dd {
-  margin: 0.1rem 0 0;
-  font-size: 1.25rem;
+.hero__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap);
+  flex-wrap: wrap;
+}
+
+.hero__greeting {
+  margin: 0;
+  font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2rem);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+/*
+ * `Intl` writes Spanish dates entirely in lower case -- "miércoles, 26 de
+ * agosto" -- and a sentence has to start with a capital.
+ *
+ * `::first-letter` and not `text-transform: capitalize`, which capitalises
+ * every word and produces "Miércoles, 26 De Agosto". Spanish does not
+ * capitalise weekdays or months, and that string is the kind of thing a reader
+ * notices immediately and quietly stops trusting the rest of the screen over.
+ */
+.hero__date {
+  margin: 0.2rem 0 0;
+  color: var(--ink-soft);
+}
+
+.hero__date::first-letter,
+.auth__day::first-letter {
+  text-transform: uppercase;
+}
+
+.hero__clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.hero__time {
+  font-family: var(--mono);
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  /* Tabular figures, so the seconds do not shove the minutes sideways. */
   font-variant-numeric: tabular-nums;
 }
 
-.actions {
+.hero__zone {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.hero__body {
+  display: flex;
+  align-items: center;
+  gap: 1.75rem;
+  flex-wrap: wrap;
+}
+
+.hero__state {
   display: flex;
   flex-direction: column;
+  gap: 0.6rem;
+  min-width: 12rem;
+  flex: 1;
+}
+
+.hero__caption {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.hero__facts {
+  display: flex;
+  gap: 1.75rem;
+  margin: 0.35rem 0 0;
+  flex-wrap: wrap;
+}
+
+.hero__facts dt {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hero__facts dd {
+  margin: 0.15rem 0 0;
+  font-family: var(--mono);
+  font-size: 1.0625rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero__actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.hero__closed {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+/* --------------------------------------------------------------- status --- */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.status__dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: currentcolor;
+  flex: none;
+}
+
+.status--run  { color: var(--good); }
+.status--rest { color: var(--warn); }
+.status--done { color: var(--ink); }
+.status--idle { color: var(--ink-faint); }
+
+/* Only the two states that are actually counting pulse. A dot that pulsed on a
+ * finished day would be saying something is still happening. */
+.status--run .status__dot,
+.status--rest .status__dot {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+/* =================================================================== ring === */
+
+.ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 11.5rem;
+  height: 11.5rem;
+  flex: none;
+}
+
+.ring svg {
+  width: 100%;
+  height: 100%;
+}
+
+.ring__track {
+  fill: none;
+  stroke: var(--line-soft);
+  stroke-width: 9;
+}
+
+.ring__fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 9;
+  stroke-linecap: round;
+  /* The only long transition in the application, and it is the one place a slow
+   * one reads as the value arriving rather than as lag. */
+  transition: stroke-dashoffset 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ring--run .ring__fill  { stroke: var(--good); }
+.ring--rest .ring__fill { stroke: var(--warn); }
+.ring--done .ring__fill { stroke: var(--solid); }
+.ring--idle .ring__fill { stroke: var(--ink-faint); }
+
+.ring__inner {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.ring__value {
+  font-family: var(--mono);
+  font-size: 1.75rem;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ring__of {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+/* ================================================================== tiles === */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
-.button {
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: transparent;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  padding: 0.9rem 1rem 1rem;
+  /* Left to right rather than all at once: the row assembles, which is what
+   * makes four numbers land as four numbers instead of as a block. */
+  animation: appear 420ms calc(var(--index) * 60ms) ease-out both;
+}
+
+.tile__icon {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-bottom: 0.35rem;
+  border-radius: 8px;
+  background: var(--sunken);
+  color: var(--ink-soft);
+}
+
+.tile--good .tile__icon { background: var(--good-soft); color: var(--good); }
+.tile--warn .tile__icon { background: var(--warn-soft); color: var(--warn); }
+
+.tile__label {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tile__value {
+  font-family: var(--mono);
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.tile__caption {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+  text-wrap: balance;
+}
+
+/* =================================================================== bars ===
+ * A fortnight of days. HTML rather than SVG: this is rectangles and labels, and
+ * percentage heights against a shared scale do the whole job while staying
+ * crisp at any width.
+ */
+
+.bars {
+  margin: 0;
+}
+
+.bars__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.3rem;
+  height: 9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bars__day {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.bars__track {
+  position: relative;
+  flex: 1;
+  border-radius: var(--radius-sm);
+  background: var(--sunken);
+  overflow: hidden;
+}
+
+/* A day the schedule does not cover. Muted rather than hidden: a gap in the
+ * row would make a fortnight look like ten days. */
+.bars__day--off .bars__track {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--sunken) 0 4px,
+    var(--line-soft) 4px 8px
+  );
+}
+
+.bars__fill {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: var(--h);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  transform-origin: bottom;
+  animation: grow 620ms calc(var(--index) * 35ms) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.bars__fill--late {
+  background: var(--warn);
+}
+
+.bars__target {
+  position: absolute;
+  inset-inline: 0;
+  bottom: var(--at);
+  height: 2px;
+  background: var(--ink-faint);
+  opacity: 0.55;
+}
+
+@keyframes grow {
+  from { transform: scaleY(0); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+
+.bars__label {
+  color: var(--ink-faint);
+  font-size: 0.625rem;
+  text-align: center;
+  text-transform: capitalize;
+  /* Fourteen labels in a narrow column overlap. Clipping one is better than
+   * two labels sitting on top of each other and neither being readable. */
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.bars__key {
+  display: flex;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin: 0.85rem 0 0;
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.key::before {
+  content: '';
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 3px;
+}
+
+.key--fill::before   { background: var(--accent); }
+.key--late::before   { background: var(--warn); }
+.key--target::before { height: 2px; border-radius: 0; background: var(--ink-faint); }
+
+/* =================================================================== line ===
+ * Today's punches. The rail is a pseudo-element on the list rather than a
+ * border on each row, so it runs behind the marks instead of between them.
+ */
+
+.line {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.line::before {
+  content: '';
+  position: absolute;
+  top: 0.9rem;
+  bottom: 0.9rem;
+  left: 0.9375rem;
+  width: 1px;
+  background: var(--line);
+}
+
+.line__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  animation: slide 380ms calc(var(--index) * 55ms) ease-out both;
+}
+
+@keyframes slide {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.line__mark {
+  display: grid;
+  place-items: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink-soft);
+}
+
+.line__mark--clock_in    { border-color: var(--good); color: var(--good); }
+.line__mark--break_start { border-color: var(--warn); color: var(--warn); }
+.line__mark--break_end   { border-color: var(--good); color: var(--good); }
+.line__mark--clock_out   { border-color: var(--solid); color: var(--solid); }
+
+.line__time {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  min-width: 3.25rem;
+}
+
+.line__what {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.line__tags {
+  display: inline-flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+/* ================================================================= access === */
+
+.access {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line-soft);
+  animation: appear 380ms calc(var(--index) * 45ms) ease-out both;
+}
+
+.access__row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.access__icon {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: none;
+  border-radius: 8px;
+  background: var(--sunken);
+  color: var(--ink-soft);
+}
+
+.access__what {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.access__where {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.access__platform,
+.access__reason {
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+
+.access__when {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+.access__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  flex: none;
+}
+
+.access__length {
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.access__ip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+}
+
+.access__ip .ico {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+/* =================================================================== tags === */
+
+.tag {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-size: 0.6875rem;
+  padding: 0.05rem 0.55rem;
+  white-space: nowrap;
+}
+
+.tag--review {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.tag--live {
+  border-color: transparent;
+  background: var(--good-soft);
+  color: var(--good);
+}
+
+/* ================================================================ buttons === */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
   color: var(--ink);
   cursor: pointer;
   font: inherit;
+  font-weight: 500;
   /* Comfortably past the 44px minimum for a touch target. */
-  min-height: 3rem;
-  padding: 0.75rem 1.25rem;
-  transition: filter 120ms ease;
+  min-height: 2.75rem;
+  padding: 0.6rem 1.1rem;
+  transition:
+    transform 120ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.button__icon {
+  display: inline-flex;
+  color: currentcolor;
 }
 
 .button--primary {
   border-color: transparent;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 600;
+  background: var(--solid);
+  color: var(--solid-ink);
+  box-shadow: 0 1px 2px rgb(23 23 26 / 18%);
 }
 
-.button--large {
-  font-size: 1.125rem;
-  min-height: 3.75rem;
+.button--outline {
+  background: var(--card);
+}
+
+.button--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-soft);
+  padding-inline: 0.7rem;
 }
 
 .button--quiet {
-  color: var(--ink-muted);
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.button--block {
+  width: 100%;
+}
+
+/* The punch buttons. Larger than everything else because they are the reason
+ * the application exists, and because they are pressed by somebody who is
+ * usually not looking carefully. */
+.button--action {
+  flex: 1;
+  min-width: 12rem;
+  min-height: 3.25rem;
+  font-size: 1rem;
+}
+
+.button:not(:disabled):hover {
+  border-color: var(--ink-faint);
+  background: var(--sunken);
+}
+
+.button--primary:not(:disabled):hover {
+  background: #2b2b30;
+  border-color: transparent;
+}
+
+.button--ghost:not(:disabled):hover,
+.button--quiet:not(:disabled):hover {
+  background: var(--sunken);
+  border-color: transparent;
+}
+
+/* Settles under the finger rather than bouncing: the press is confirmation
+ * that something was received, and it has to be over before the reply is. */
+.button:not(:disabled):active {
+  transform: scale(0.985);
 }
 
 .button:disabled {
   cursor: progress;
-  filter: saturate(0.4) brightness(0.8);
-}
-
-.button:not(:disabled):hover {
-  filter: brightness(1.08);
+  opacity: 0.55;
 }
 
 .button:focus-visible,
-.field__input:focus-visible {
-  outline: 3px solid var(--accent);
+.entry__box:has(.entry__input:focus-visible),
+.check input:focus-visible,
+.link:focus-visible {
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.field {
+.link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ================================================================= fields === */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.form__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+}
+
+.entry {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
 }
 
-.field__label {
-  color: var(--ink-muted);
+.entry__label {
   font-size: 0.875rem;
+  font-weight: 600;
 }
 
-.field__input {
+.entry__box {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  padding-inline: 0.85rem;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.entry__box:hover {
+  border-color: var(--ink-faint);
+}
+
+.entry__icon {
+  display: inline-flex;
+  color: var(--ink-faint);
+}
+
+.entry__input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
   color: var(--ink);
   font: inherit;
   min-height: 3rem;
-  padding: 0.75rem;
+  padding: 0;
 }
 
-.login {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap);
+.entry__input:focus {
+  outline: none;
 }
 
-.login__title {
-  margin: 0;
-  font-size: 1.75rem;
+.entry__input::placeholder {
+  color: var(--ink-faint);
 }
 
-.login__subtitle {
-  margin: -0.5rem 0 0;
-  color: var(--ink-muted);
+.entry__reveal {
+  display: inline-flex;
+  border: 0;
+  background: none;
+  padding: 0.35rem;
+  margin-inline-end: -0.35rem;
+  color: var(--ink-faint);
+  cursor: pointer;
 }
+
+.entry__reveal:hover {
+  color: var(--ink);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  color: var(--ink-soft);
+}
+
+.check input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--solid);
+  cursor: pointer;
+}
+
+.meter {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.meter__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transform-origin: left;
+  transition: scale 240ms ease;
+}
+
+/* ================================================================ notices === */
 
 .notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  flex-wrap: wrap;
   border: 1px solid var(--line);
-  border-left-width: 4px;
-  border-radius: var(--radius);
+  border-inline-start-width: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--card);
   margin: 0;
-  padding: 0.85rem 1rem;
+  padding: 0.8rem 1rem;
+  font-size: 0.9375rem;
 }
 
-.notice--ok {
-  border-left-color: var(--ok);
+.notice__icon {
+  display: inline-flex;
+  flex: none;
 }
 
-.notice--warning {
-  border-left-color: var(--warning);
+.notice--ok      { border-inline-start-color: var(--good); background: var(--good-soft); }
+.notice--warning { border-inline-start-color: var(--warn); background: var(--warn-soft); }
+.notice--error   { border-inline-start-color: var(--bad);  background: var(--bad-soft); }
+.notice--info    { border-inline-start-color: var(--info); background: var(--info-soft); }
+
+/* Keyed by its text in the markup, so a second punch replays this rather than
+ * swapping the words silently under somebody still reading the first. */
+.notice--pop {
+  animation: pop 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.notice--error {
-  border-left-color: var(--error);
+@keyframes pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
 }
 
-.punches,
 .rejected {
   display: flex;
   flex-direction: column;
@@ -226,45 +1190,174 @@ body {
   list-style: none;
   margin: 0;
   padding: 0;
+  width: 100%;
 }
 
-.punch {
+/* =================================================================== auth ===
+ * Sign-in and the temporary-password wall. A form on the left, the mesh on the
+ * right, and below 60rem the art becomes a band above the form -- on a phone
+ * the mark and the clock are still the fastest way to know what opened.
+ */
+
+.auth {
+  display: grid;
+  grid-template-rows: 8rem minmax(0, 1fr);
+  min-height: 100dvh;
+}
+
+.auth__panel {
+  display: grid;
+  place-items: center;
+  padding: 2rem 1.25rem calc(2rem + env(safe-area-inset-bottom));
+  background: var(--card);
+}
+
+.auth__form {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 0.75rem;
+  width: 100%;
+  max-width: 24rem;
+  animation: appear 500ms ease-out both;
 }
 
-.punch__time {
-  color: var(--ink-muted);
-  font-variant-numeric: tabular-nums;
-  min-width: 4.5rem;
+.auth__mark {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.75rem;
+  border-radius: 14px;
+  background: var(--solid);
+  color: var(--solid-ink);
 }
 
-.tag {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--ink-muted);
-  font-size: 0.75rem;
-  padding: 0.1rem 0.6rem;
+.auth__mark .ico {
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
-.tag--review {
-  border-color: var(--warning);
-  color: var(--warning);
-}
-
-.header__actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.muted {
-  color: var(--ink-muted);
+.auth__title {
   margin: 0;
+  font-size: clamp(1.625rem, 1.3rem + 1.4vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
 }
+
+.auth__subtitle {
+  margin: 0 0 0.5rem;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+.auth__footer {
+  margin-top: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line-soft);
+  font-size: 0.875rem;
+}
+
+.auth__art {
+  position: relative;
+  overflow: hidden;
+  order: -1;
+  background: var(--sunken);
+}
+
+.auth__clock {
+  position: absolute;
+  inset-inline-start: 1.5rem;
+  inset-block-end: 1.25rem;
+  color: var(--ink);
+}
+
+.auth__time {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: clamp(2rem, 1.2rem + 3vw, 3.5rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.auth__day {
+  margin: 0.35rem 0 0;
+  font-size: 0.875rem;
+  /* On top of the mesh, which is pale but not uniform. */
+  color: color-mix(in srgb, var(--ink) 72%, transparent);
+}
+
+@media (min-width: 60rem) {
+  .auth {
+    grid-template-rows: none;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .auth__art {
+    order: 0;
+  }
+
+  .auth__panel {
+    padding: 2rem 3rem;
+  }
+}
+
+/* ============================================================== responsive === */
+
+@media (min-width: 34rem) {
+  .tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 62rem) {
+  /* Back to two across once the tiles are in the narrow right-hand column:
+   * four of them there would leave no room for the figures. */
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 33.99rem) {
+  .hero__body {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .hero__state {
+    align-items: center;
+  }
+
+  .hero__facts {
+    justify-content: center;
+  }
+
+  .button--action {
+    min-width: 100%;
+  }
+}
+
+/* ========================================================== reduced motion ===
+ * Everything above either drifts, rises, grows or breathes. Under this query
+ * all of it settles in its final position instead of disappearing: the setting
+ * asks for less movement, not for less design, and a mesh that stopped drifting
+ * is still a gradient.
+ */
 
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .mesh__blob {
+    /* Held at the midpoint of the drift, so the still picture is the one the
+     * animation spends most of its time near rather than one of its extremes. */
+    transform: translate(1%, -1.5%) scale(1.09);
   }
 }

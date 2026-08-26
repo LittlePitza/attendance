@@ -1,8 +1,14 @@
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
+import { version } from './package.json' with { type: 'json' };
 
 export default defineConfig({
+  // Stamped into the bundle so a session row can say which build opened it.
+  // Read from `package.json` rather than written twice: a version that has to
+  // be kept in step by hand is a version that is wrong.
+  define: { __APP_VERSION__: JSON.stringify(version) },
+
   // The repository keeps one `.env`, at its root, described by the `.env.example`
   // beside it. Without this, Vite looks for a second one inside `web/`, finds
   // nothing, and produces a bundle that builds cleanly and then refuses to
@@ -63,9 +69,16 @@ export default defineConfig({
         // second copy of it.
         launch_handler: { client_mode: 'focus-existing' },
         display: 'standalone',
-        orientation: 'portrait',
-        background_color: '#0f172a',
-        theme_color: '#0f172a',
+        // Not `portrait` any more: this is installed on desktops as well as
+        // phones, and locking a laptop window to portrait is a rule invented
+        // for a device that is not the one most of these machines are.
+        orientation: 'any',
+        // The ground the application actually paints, so the splash screen and
+        // the window chrome do not flash a colour the app never uses. Changing
+        // these is safe in a way changing `id` is not: the operating system
+        // files the installation under `id`, and only under `id`.
+        background_color: '#fbfaf9',
+        theme_color: '#fbfaf9',
         icons: [
           {
             src: '/icon.svg',

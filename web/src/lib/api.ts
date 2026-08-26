@@ -6,13 +6,19 @@ import type {
   AlertDecisionResult,
   AlertKind,
   AlertRuleRow,
+  AppSession,
   AssignableRole,
+  ClosableReason,
+  CloseSessionResult,
   DepartmentRow,
+  DeviceDescription,
   EmployeeDay,
   HeartbeatResult,
   MyDay,
+  MySummary,
   OfflinePunchEvent,
   OpenAlert,
+  OpenSessionResult,
   Profile,
   ProvisionResult,
   PunchDecision,
@@ -25,6 +31,7 @@ import type {
   ServerTime,
   SyncResult,
   TeamMember,
+  TouchSessionResult,
 } from './types';
 
 /**
@@ -128,6 +135,55 @@ export const api = {
 
   /** Proof of life while a workday is open. Feeds the `no_connection` alert. */
   heartbeat: (): Promise<HeartbeatResult> => rpc<HeartbeatResult>('heartbeat'),
+
+  /**
+   * The last few weeks as the database judges them. Every figure in it --
+   * hours against expected, punctuality, the streak -- is decided there.
+   */
+  mySummary: (days?: number): Promise<MySummary> =>
+    rpc<MySummary>('my_summary', days === undefined ? {} : { p_days: days }),
+
+  /* ------------------------------------------------------ The access log --- */
+
+  /**
+   * Opens or rejoins the session for this device. The database decides which
+   * of the two it was: a reload is not a second sign-in, and a machine that
+   * went quiet for hours is not the same session as the one that comes back.
+   */
+  openSession: (device: DeviceDescription): Promise<OpenSessionResult> =>
+    rpc<OpenSessionResult>('open_session', {
+      p_device_id: device.deviceId,
+      p_platform: device.platform,
+      p_time_zone: device.timeZone,
+      p_locale: device.locale,
+      p_app_version: device.appVersion,
+    }),
+
+  /** Still open. Answers `active: false` once the sweeper has closed it. */
+  touchSession: (sessionId: string): Promise<TouchSessionResult> =>
+    rpc<TouchSessionResult>('touch_session', { p_session_id: sessionId }),
+
+  /**
+   * The hour the log exists for. Idempotent: a `pagehide` firing after an
+   * explicit sign-out keeps the first close rather than blurring the reason.
+   */
+  closeSession: (sessionId: string, reason: ClosableReason): Promise<CloseSessionResult> =>
+    rpc<CloseSessionResult>('close_session', {
+      p_session_id: sessionId,
+      p_reason: reason,
+    }),
+
+  /** The caller's own accesses: which machine, from where, opened and closed. */
+  mySessions: (limit?: number): Promise<AppSession[]> =>
+    rpc<AppSession[]>('my_sessions', limit === undefined ? {} : { p_limit: limit }),
+
+  /** Somebody else's, for whoever RLS says may look. Scope is not decided here. */
+  employeeSessions: (employeeId: string, from?: string, to?: string): Promise<AppSession[]> =>
+    rpc<AppSession[]>('employee_sessions', {
+      p_employee_id: employeeId,
+      ...(from === undefined ? {} : { p_from: from }),
+      ...(to === undefined ? {} : { p_to: to }),
+    }),
 
   /**
    * Who is signed in, and what they are allowed to see. One row, or none at

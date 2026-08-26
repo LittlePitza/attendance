@@ -39,6 +39,15 @@ export interface DayPunch {
   readonly review_reason: string | null;
 }
 
+/**
+ * Which of the two counters is running, if either.
+ *
+ * The database says so rather than the screen working it out from the state.
+ * It is the same question as "does a break count as worked time", and that is
+ * the state machine's to answer, not a component's.
+ */
+export type CountingKind = 'worked' | 'break';
+
 /** What `public.my_day()` returns: the whole punch screen in one answer. */
 export interface MyDay {
   readonly server_time: string;
@@ -47,8 +56,20 @@ export interface MyDay {
   readonly time_zone: string;
   readonly state: WorkdayState;
   readonly next_actions: readonly PunchKind[];
+  /** As the engine accumulated them: they only move when a punch closes an interval. */
   readonly worked_seconds: number;
   readonly break_seconds: number;
+  /**
+   * The same totals with the stretch that is still running included, and the
+   * instant it has been running from. The screen ticks forward from
+   * `server_time` between refreshes; it never decides which counter is running.
+   */
+  readonly counting: CountingKind | null;
+  readonly counting_since: string | null;
+  readonly worked_seconds_live: number;
+  readonly break_seconds_live: number;
+  /** Working seconds today's schedule asks for. Null on a day it does not cover. */
+  readonly expected_seconds: number | null;
   readonly opened_at: string | null;
   readonly closed_at: string | null;
   readonly last_heartbeat: string | null;
@@ -378,4 +399,112 @@ export interface ProvisionResult {
   readonly temporary_password?: string;
   readonly recorded?: boolean;
   readonly locked_out?: boolean;
+}
+
+/* --------------------------------------------------------- The access log ---
+ * One row per stretch of the application being open on one device. The three
+ * writers are `SECURITY DEFINER` and derive the account from the token, like
+ * every other write in this system; `my_sessions()` is the reader.
+ */
+
+/**
+ * How a session ended. `expired` is the sweeper's word and the client can never
+ * send it: it means nobody heard from the device again, which a client
+ * reporting in contradicts.
+ */
+export const SESSION_END_REASONS = ['sign_out', 'app_closed', 'expired'] as const;
+export type SessionEndReason = (typeof SESSION_END_REASONS)[number];
+
+/** What the client may claim. The database narrows anything else to `sign_out`. */
+export type ClosableReason = Extract<SessionEndReason, 'sign_out' | 'app_closed'>;
+
+/** What the device says about itself. Evidence, not proof -- so it is optional. */
+export interface DeviceDescription {
+  readonly deviceId: string;
+  readonly platform: string | null;
+  readonly timeZone: string | null;
+  readonly locale: string | null;
+  readonly appVersion: string | null;
+}
+
+export interface OpenSessionResult {
+  readonly session_id: string;
+  readonly started_at: string;
+  /** True when this call rejoined a session rather than starting one. */
+  readonly resumed: boolean;
+  /** HR revoked this machine. The engine refuses its punches; the screen says so. */
+  readonly device_revoked: boolean;
+  readonly server_time: string;
+}
+
+export interface TouchSessionResult {
+  /** False once the session was closed. The client opens a new one rather than reporting into it. */
+  readonly active: boolean;
+  readonly server_time: string;
+}
+
+export interface CloseSessionResult {
+  readonly closed: boolean;
+  readonly ended_at: string | null;
+  readonly end_reason: SessionEndReason | null;
+  readonly server_time: string;
+}
+
+/** One access, as `my_sessions()` reports it. `ip` is text: Postgres holds it as `inet`. */
+export interface AppSession {
+  readonly id: string;
+  readonly device_id: string;
+  readonly started_at: string;
+  readonly ended_at: string | null;
+  readonly end_reason: SessionEndReason | null;
+  readonly last_seen_at: string;
+  readonly active: boolean;
+  readonly ip: string | null;
+  readonly platform: string | null;
+  readonly time_zone: string | null;
+  readonly user_agent: string | null;
+}
+
+/* ------------------------------------------------------------ The summary ---
+ * `my_summary()` decides every figure here. Hours against expected,
+ * punctuality, the streak and the average entry are all judgements about
+ * somebody's attendance, and this client makes none of them: it lays out what
+ * it is handed, the way the board does.
+ */
+
+export interface SummaryDay {
+  readonly date: string;
+  /** False on a day the schedule does not cover -- a weekend, most of the time. */
+  readonly scheduled: boolean;
+  readonly state: WorkdayState;
+  readonly worked_seconds: number;
+  readonly break_seconds: number;
+  readonly expected_seconds: number;
+  readonly entry_expected: string | null;
+  readonly opened_at: string | null;
+  readonly closed_at: string | null;
+  /** Carries a `late_entry` alert the evaluator raised and HR did not dismiss. */
+  readonly late: boolean;
+}
+
+export interface MySummary {
+  readonly server_time: string;
+  readonly time_zone: string;
+  readonly from: string;
+  readonly to: string;
+  readonly days: number;
+  readonly worked_seconds: number;
+  readonly break_seconds: number;
+  readonly expected_seconds: number;
+  readonly days_scheduled: number;
+  readonly days_worked: number;
+  readonly days_complete: number;
+  readonly late_days: number;
+  readonly on_time_days: number;
+  readonly absent_days: number;
+  /** Null until there is a day with an entry to work it out from. */
+  readonly punctuality_pct: number | null;
+  readonly average_entry: string | null;
+  readonly streak_days: number;
+  readonly series: readonly SummaryDay[];
 }
