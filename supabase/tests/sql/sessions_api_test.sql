@@ -260,8 +260,15 @@ begin
   -- row above was closed as `sign_out`, so it must NOT be resumed -- only
   -- `app_closed` is.
 
+  -- `now()` does not move inside a transaction, so a session opened moments ago
+  -- has `started_at = now()` exactly. The whole row is backdated, not just the
+  -- close: leaving `started_at` where it is would put the close before the open
+  -- and the constraint would -- rightly -- refuse it.
   update attendance.app_sessions
-     set ended_at = now() - interval '10 seconds', end_reason = 'app_closed'
+     set started_at   = now() - interval '1 hour',
+         last_seen_at = now() - interval '11 seconds',
+         ended_at     = now() - interval '10 seconds',
+         end_reason   = 'app_closed'
    where id = v_session;
 
   perform set_config('role', 'authenticated', true);
@@ -474,8 +481,18 @@ begin
      and (v_result ->> 'worked_seconds_live')::integer = 5400);
 
   -- ==================================================== PHASE I: the summary ====
-  -- Three finished days behind today, one of them late, and one scheduled day
-  -- before those with nobody on it.
+  -- Three finished days behind today, one of them late.
+  --
+  -- Today's workday was left finished by the phase above, with an entry two
+  -- hours before whatever hour this suite runs at. It is pinned to a known hour
+  -- first, because it counts towards both the average entry and the streak --
+  -- and an assertion that depended on the wall clock of the CI runner would
+  -- pass or fail by the time of day.
+
+  update attendance.workdays
+     set opened_at = (v_today + time '09:30')::timestamp at time zone v_zone,
+         closed_at = (v_today + time '18:00')::timestamp at time zone v_zone
+   where id = v_workday;
 
   insert into attendance.workdays (
     employee_id, work_date, time_zone, state,
@@ -520,13 +537,15 @@ begin
      coalesce(v_result ->> 'punctuality_pct', 'null'),
      (v_result ->> 'punctuality_pct')::integer = 75);
 
+  -- Today counts, because today is finished. A day still in progress is left
+  -- out until it ends: it neither extends the streak nor breaks it.
   insert into test_results(name, expected, got, passed) values
-    ('the streak counts back to the first day that was not finished', '3',
-     coalesce(v_result ->> 'streak_days', 'null'), (v_result ->> 'streak_days')::integer = 3);
+    ('the streak counts back to the first day that was not finished', '4',
+     coalesce(v_result ->> 'streak_days', 'null'), (v_result ->> 'streak_days')::integer = 4);
 
   insert into test_results(name, expected, got, passed) values
-    ('the average entry is the mean of the hours arrived at', '09:10',
-     coalesce(v_result ->> 'average_entry', 'null'), (v_result ->> 'average_entry') = '09:10');
+    ('the average entry is the mean of the hours arrived at', '09:15',
+     coalesce(v_result ->> 'average_entry', 'null'), (v_result ->> 'average_entry') = '09:15');
 
   insert into test_results(name, expected, got, passed) values
     ('the series has one entry per day of the range', '30',
