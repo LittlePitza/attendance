@@ -300,3 +300,32 @@ test('the documented restore cannot be aimed at production', async () => {
   assert.match(freePlan, /ON_ERROR_STOP=1/);
   assert.match(freePlan, /--single-transaction/);
 });
+
+test('the backup CLI is pinned to the version the repository develops against', async () => {
+  // The CLI is installed two different ways: `supabase` in devDependencies for
+  // local work and CI, and supabase/setup-cli for the backup workflow. The
+  // shape of a dump is version specific -- the excluded schemas and the sed
+  // rewrites both move between releases -- and backup.yml asserts against one
+  // version's output. A comment there asks for the two to be bumped together,
+  // which is the kind of instruction that holds until the day it does not.
+  const workflow = await readFile(
+    path.join(repositoryRoot, '.github', 'workflows', 'backup.yml'),
+    'utf8',
+  );
+  const manifest = JSON.parse(
+    await readFile(path.join(repositoryRoot, 'package.json'), 'utf8'),
+  );
+
+  const pinned = /supabase\/setup-cli@v\d+\s+with:\s+version:\s*(\S+)/.exec(workflow);
+  assert.ok(pinned, 'backup.yml must pin an explicit supabase/setup-cli version');
+
+  // `latest` resolves through an anonymous api.github.com call that is rate
+  // limited per runner IP, and it silently changes the dump's shape.
+  assert.notEqual(pinned[1], 'latest', 'the backup CLI version must not be `latest`');
+
+  assert.equal(
+    pinned[1],
+    manifest.devDependencies.supabase,
+    'backup.yml and the supabase devDependency must name the same CLI version',
+  );
+});

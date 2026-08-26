@@ -41,7 +41,8 @@ jobs:
         # And the shape of the dump is version specific: the CLI hardcodes the
         # list of schemas it excludes and a series of sed rewrites, both of
         # which move between releases. The verification step below asserts
-        # against this version's output, so bump the two together.
+        # against this version's output, so bump the two together -- `npm test`
+        # fails when they disagree rather than leaving that to this comment.
         uses: supabase/setup-cli@v1
         with:
           version: 2.115.0
