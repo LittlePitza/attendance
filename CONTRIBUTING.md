@@ -451,7 +451,7 @@ cd supabase/functions && deno test --filter "recipient"
 ```
 
 **The SQL suites are the exception: there is no way to run one.**
-`npm run db:test` runs all three, because the wrapper takes a single known
+`npm run db:test` runs all five, because the wrapper takes a single known
 action and rejects every additional argument -- which is the same property that
 stops a suite being pointed at a different database by accident. Narrow inside
 the file instead.
@@ -459,7 +459,7 @@ the file instead.
 `npm test` verifies the assembler, command allowlist, local-only configuration,
 portable CLI launcher and documentation guardrails. `npm run db:verify` then
 builds `.local/supabase`, starts local Postgres, resets it from all migrations
-and synthetic fixtures, and runs the three SQL suites.
+and synthetic fixtures, and runs the five SQL suites.
 
 The wrapper accepts one known action and constructs every Supabase argument
 itself. There is no `--db-url`, link command, project selector or remote fallback.
@@ -476,7 +476,7 @@ boundary for an operating database.
 npm run db:prepare  # assemble the ignored local workspace
 npm run db:start    # start only the local database service
 npm run db:reset    # replay migrations and synthetic seed locally
-npm run db:test     # run the punch, alert and security SQL suites locally
+npm run db:test     # run the punch, alert, read, review and security SQL suites
 npm run db:verify   # start, reset and test in one command
 npm run db:stop     # stop this repository's local stack
 ```

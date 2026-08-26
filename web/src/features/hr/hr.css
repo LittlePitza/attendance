@@ -1111,3 +1111,178 @@ button.stat:hover {
     stroke-dashoffset: 0;
   }
 }
+
+/* ================================================================ review ===
+ * Where a judgement gets written down. Denser than the board on purpose: this
+ * is read while deciding one case, not scanned across thirty.
+ *
+ * It borrows the board's card and button components rather than defining a
+ * second set. Only what has no equivalent yet is new here.
+ */
+.review {
+  display: grid;
+  gap: 1rem;
+  align-items: start;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+
+.review__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review__pick {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  transition: border-color 150ms ease;
+}
+
+.review__pick:hover {
+  border-color: var(--edge);
+}
+
+/* The selected one is a near-black ring rather than a fifth hue, for the same
+ * reason the board's filters are. */
+.review__pick--on {
+  border-color: var(--solid);
+  box-shadow: 0 0 0 1px var(--solid);
+}
+
+.review__who {
+  font-weight: 600;
+}
+
+.review__day {
+  margin-top: 1rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.review__day-title {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.review__punches {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review__punch {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.85rem;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.review__punch-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.review__stamp {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.review__verdict {
+  padding: 0.1rem 0.45rem;
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-radius: 999px;
+}
+
+/* The engine's own words for why it did not trust the punch. */
+.review__why {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+.review__evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin: 0;
+}
+
+.review__evidence dt {
+  font-size: 0.7rem;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.review__evidence dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+
+.review__field {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.review__label {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.review__reason {
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  font-size: 0.875rem;
+  color: inherit;
+  resize: vertical;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.review__reason:focus-visible {
+  border-color: var(--solid);
+  outline: none;
+  box-shadow: 0 0 0 1px var(--solid);
+}
+
+.review__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* A refusal from the database, in the Spanish the engine wrote. */
+.review__error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--bad);
+}
+
+@media (max-width: 68rem) {
+  .review {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

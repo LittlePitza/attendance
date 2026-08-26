@@ -185,3 +185,70 @@ export interface OpenAlert {
   readonly created_at: string;
   readonly notified_at: string | null;
 }
+
+/** What HR may record about a punch that arrived flagged. */
+export const PUNCH_DECISIONS = ['approve_offline', 'reject_offline'] as const;
+export type PunchDecision = (typeof PUNCH_DECISIONS)[number];
+
+/** What HR may record an alert was worth. Never back to `open`. */
+export const ALERT_DECISIONS = ['acknowledged', 'resolved', 'dismissed'] as const;
+export type AlertDecision = (typeof ALERT_DECISIONS)[number];
+
+/** The decision in force on a punch, or null while nobody has made one. */
+export interface PunchVerdict {
+  readonly kind: PunchDecision;
+  readonly reason: string;
+  readonly created_at: string;
+}
+
+/**
+ * One punch as a reviewer sees it: not only when it landed, but the evidence of
+ * how it got here. `occurred_at` is what the record says; `client_reported_at`,
+ * `clock_skew_ms` and `sync_delay_seconds` are what the device claimed, and
+ * `review_reason` is the engine's own words for why it was not trusted.
+ *
+ * There are no coordinates here and there is no room for them: `authenticated`
+ * was never granted those columns.
+ */
+export interface ReviewPunch {
+  readonly id: string;
+  readonly kind: PunchKind;
+  readonly occurred_at: string;
+  readonly source: PunchSource;
+  readonly client_reported_at: string | null;
+  readonly clock_skew_ms: number | null;
+  readonly sync_delay_seconds: number | null;
+  readonly needs_review: boolean;
+  readonly review_reason: string | null;
+  readonly decision: PunchVerdict | null;
+}
+
+/** One employee's day, as `employee_day()` reports it to whoever may see it. */
+export interface EmployeeDay {
+  readonly employee_id: string;
+  readonly employee_name: string;
+  readonly date: string;
+  readonly time_zone: string;
+  readonly workday_id: string | null;
+  readonly state: WorkdayState;
+  readonly opened_at: string | null;
+  readonly closed_at: string | null;
+  readonly worked_seconds: number;
+  readonly break_seconds: number;
+  readonly has_offline: boolean;
+  readonly needs_review: boolean;
+  readonly punches: readonly ReviewPunch[];
+}
+
+export interface ReviewResult {
+  readonly adjustment_id: string;
+  readonly punch_id: string;
+  readonly decision: PunchDecision;
+  readonly workday_needs_review: boolean;
+}
+
+export interface AlertDecisionResult {
+  readonly alert_id: string;
+  readonly state: AlertDecision;
+  readonly kind: AlertKind;
+}

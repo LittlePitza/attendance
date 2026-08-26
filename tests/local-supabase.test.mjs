@@ -33,10 +33,11 @@ test('prepareWorkspace creates an isolated local Supabase project', async (t) =>
   assert.match(config, /^project_id = "attendance-local"$/m);
   assert.doesNotMatch(config, new RegExp(productionProjectRef));
   assert.equal(migrations[0], '00000000000000_shared_schema_test_baseline.sql');
-  assert.equal(migrations.length, 14);
+  assert.equal(migrations.length, 15);
   assert.ok(migrations.includes('20260824172955_free_plan_maintenance.sql'));
   assert.ok(migrations.includes('20260825153106_alert_evaluation_and_outbox.sql'));
   assert.ok(migrations.includes('20260825153406_attendance_read_api.sql'));
+  assert.ok(migrations.includes('20260825200000_attendance_review_api.sql'));
   assert.equal(
     await readFile(path.join(generatedSupabase, 'seed.sql'), 'utf8'),
     await readFile(path.join(repositoryRoot, 'supabase/tests/fixtures/local_seed.sql'), 'utf8'),
@@ -183,6 +184,7 @@ test('executeLocalCommand verifies a clean local database in a fixed sequence', 
     'punch_engine_test.sql',
     'alert_engine_test.sql',
     'read_api_test.sql',
+    'review_api_test.sql',
     'security_invariants_test.sql',
   ]);
 });

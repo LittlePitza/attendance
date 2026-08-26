@@ -17,6 +17,7 @@ const sqlSuites = [
   'punch_engine_test.sql',
   'alert_engine_test.sql',
   'read_api_test.sql',
+  'review_api_test.sql',
   'security_invariants_test.sql',
 ];
 const usage =
