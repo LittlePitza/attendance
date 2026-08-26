@@ -1,13 +1,18 @@
 import { NetworkUnavailableError, RpcError, isTransportFailure } from './errors';
 import { supabase } from './supabase';
 import type {
+  AlertDecision,
+  AlertDecisionResult,
+  EmployeeDay,
   HeartbeatResult,
   MyDay,
   OfflinePunchEvent,
   OpenAlert,
   Profile,
+  PunchDecision,
   PunchKind,
   PunchResult,
+  ReviewResult,
   ServerTime,
   SyncResult,
   TeamMember,
@@ -90,4 +95,42 @@ export const api = {
   /** What the evaluator raised and nobody has dealt with. */
   openAlerts: (since?: string): Promise<OpenAlert[]> =>
     rpc<OpenAlert[]>('open_alerts', since === undefined ? {} : { p_since: since }),
+
+  /**
+   * The evidence behind a flagged day: one employee's punches and the decision
+   * already recorded against each. Scope comes from RLS, so asking about
+   * somebody outside it is refused by the database, not by this call.
+   */
+  employeeDay: (employeeId: string, date?: string): Promise<EmployeeDay> =>
+    rpc<EmployeeDay>('employee_day', {
+      p_employee_id: employeeId,
+      ...(date === undefined ? {} : { p_date: date }),
+    }),
+
+  /**
+   * HR's decision about a punch that arrived flagged. The punch is append-only
+   * and never changes; this writes the decision beside it.
+   */
+  reviewPunch: (
+    punchId: string,
+    decision: PunchDecision,
+    reason: string,
+  ): Promise<ReviewResult> =>
+    rpc<ReviewResult>('review_punch', {
+      p_punch_id: punchId,
+      p_decision: decision,
+      p_reason: reason,
+    }),
+
+  /** What HR decided an alert was worth. Never deletes it, never reopens it. */
+  decideAlert: (
+    alertId: string,
+    state: AlertDecision,
+    note: string,
+  ): Promise<AlertDecisionResult> =>
+    rpc<AlertDecisionResult>('decide_alert', {
+      p_alert_id: alertId,
+      p_state: state,
+      p_note: note,
+    }),
 } as const;

@@ -1,4 +1,11 @@
-import type { AlertKind, AlertSeverity, WorkdayState } from '../../lib/types';
+import type {
+  AlertDecision,
+  AlertKind,
+  AlertSeverity,
+  PunchDecision,
+  PunchKind,
+  WorkdayState,
+} from '../../lib/types';
 
 /**
  * Spanish for everything HR reads on the board.
@@ -22,6 +29,32 @@ export const SEVERITY_LABELS: Readonly<Record<AlertSeverity, string>> = {
   high: 'Alta',
   medium: 'Media',
   low: 'Baja',
+};
+
+/**
+ * Deliberately a second copy of what `features/punch/labels.ts` calls
+ * `PUNCH_HISTORY_LABELS`, for the same reason `STATE_LABELS` above is: the two
+ * screens share `lib/` and nothing else. Four short strings are a cheaper price
+ * than a feature reaching into another feature's presentation.
+ */
+export const PUNCH_LABELS: Readonly<Record<PunchKind, string>> = {
+  clock_in: 'Entrada',
+  break_start: 'Inicio de pausa',
+  break_end: 'Fin de pausa',
+  clock_out: 'Salida',
+};
+
+/** What a recorded decision is called once it is on the punch. */
+export const DECISION_LABELS: Readonly<Record<PunchDecision, string>> = {
+  approve_offline: 'Aprobado',
+  reject_offline: 'Rechazado',
+};
+
+/** What HR is choosing when it closes an alert. */
+export const ALERT_DECISION_LABELS: Readonly<Record<AlertDecision, string>> = {
+  acknowledged: 'Enterada',
+  resolved: 'Resuelta',
+  dismissed: 'Descartada',
 };
 
 export const ALERT_LABELS: Readonly<Record<AlertKind, string>> = {

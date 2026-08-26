@@ -5,6 +5,7 @@ import type { Profile, WorkdayState } from '../../lib/types';
 import { useClockSkew } from '../punch/useClockSkew';
 import { AlertsPanel } from './components/AlertsPanel';
 import { ArrivalsChart } from './components/ArrivalsChart';
+import { ReviewPanel } from './components/ReviewPanel';
 import {
   IconAlert,
   IconBreak,
@@ -31,6 +32,7 @@ import {
   filterTeam,
   summarise,
 } from './summary';
+import { useEmployeeDay } from './useEmployeeDay';
 import { useOpenAlerts } from './useOpenAlerts';
 import { useTeamDay } from './useTeamDay';
 
@@ -65,11 +67,13 @@ export function HrDashboard({
   const [state, setState] = useState<WorkdayState | 'all'>('all');
   const [department, setDepartment] = useState<string>('all');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [reviewing, setReviewing] = useState<string | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { team, error, loading, loadedAt, refresh } = useTeamDay(date, online);
   const alerts = useOpenAlerts(date, online);
+  const employeeDay = useEmployeeDay(reviewing, date);
 
   // The board is read by one person in one place, which is the same assumption
   // `team_day()` makes when it resolves its date. The browser's zone is that
@@ -115,6 +119,16 @@ export function HrDashboard({
     void alertsRefresh();
   }, [refresh, alertsRefresh]);
 
+  // After a decision the screen asks again rather than predicting the answer.
+  // All three reads move: the workday's flag may have cleared, the alert may
+  // have left the open list, and the punch now carries a verdict.
+  const dayRefresh = employeeDay.refresh;
+  const afterDecision = useCallback((): void => {
+    void refresh();
+    void alertsRefresh();
+    void dayRefresh();
+  }, [refresh, alertsRefresh, dayRefresh]);
+
   const pickState = useCallback((next: WorkdayState): void => {
     setView('team');
     setState((current) => (current === next ? 'all' : next));
@@ -152,6 +166,7 @@ export function HrDashboard({
         view={view}
         onView={setView}
         alertCount={alerts.alerts.length}
+        reviewCount={summary.needsReview}
         profile={profile}
         loadedAt={loadedAt}
         online={online}
@@ -362,7 +377,7 @@ export function HrDashboard({
                 <TeamBoard team={visible} timeZone={timeZone} alertsByEmployee={alertsByEmployee} />
               </section>
             </>
-          ) : (
+          ) : view === 'alerts' ? (
             <section className="panel">
               <div className="panel__head">
                 <div>
@@ -388,6 +403,18 @@ export function HrDashboard({
 
               <AlertsPanel alerts={visibleAlerts} timeZone={timeZone} boardDate={shownDate} />
             </section>
+          ) : (
+            <ReviewPanel
+              team={team}
+              alerts={alerts.alerts}
+              day={employeeDay.day}
+              dayError={employeeDay.error}
+              dayLoading={employeeDay.loading}
+              selected={reviewing}
+              onSelect={setReviewing}
+              timeZone={timeZone}
+              onDecided={afterDecision}
+            />
           )}
         </main>
       </div>

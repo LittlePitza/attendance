@@ -151,14 +151,24 @@ The client does not write tables; it calls functions.
 | `my_history(from, to)` | authenticated | The caller's own workdays, at most 92 days |
 | `team_day(date)` | authenticated | Every employee the caller may see, with their state that day |
 | `open_alerts(since, limit)` | authenticated | Open alerts within the caller's scope |
+| `employee_day(employee, date)` | authenticated | One person's punches and the decision recorded against each |
+| `review_punch(punch, decision, reason)` | hr, admin | Records what HR decided about a punch that arrived flagged |
+| `decide_alert(alert, state, note)` | hr, admin | Records what HR decided an alert was worth |
 
-The first five write and are `SECURITY DEFINER`, because they are the only write
-path and have to hold privileges the caller does not. **The last four are
-`SECURITY INVOKER`, and that is deliberate**: `internal.can_view_employee()`
+**Writes elevate; reads do not.** `punch`, `sync_punches`, `heartbeat`,
+`review_punch` and `decide_alert` are `SECURITY DEFINER`, because they are the
+only write path and have to hold privileges the caller does not. Everything else
+is `SECURITY INVOKER`, and that is deliberate: `internal.can_view_employee()`
 already decides who sees whom, and the column grants already withhold
 coordinates. A read function that elevated would have to reimplement both and
 could get either wrong. As it stands, a bug in a read function is a bug in what
-is displayed — it cannot become a leak.
+is displayed — it cannot become a leak. `security_invariants_test.sql` asserts
+the mode of all twelve, so the rule is enforced rather than remembered.
+
+The two writers HR calls take a mandatory reason of at least ten characters and
+land a row in `attendance.audit_events`. Neither ever edits a punch:
+`attendance.punches` is append-only, so approving one writes a decision beside
+it rather than changing how it arrived.
 
 ### Roles
 
@@ -275,7 +285,7 @@ npm run db:stop
 
 `db:verify` assembles `.local/supabase`, starts an isolated Postgres container,
 replays the immutable migration history over a synthetic shared-schema baseline,
-loads synthetic seed data, and runs the three SQL suites. It does
+loads synthetic seed data, and runs the five SQL suites. It does
 not accept a database URL or a project ref. See
 [docs/local-development.md](docs/local-development.md) for the complete workflow.
 
@@ -412,7 +422,8 @@ short of where the client actually stands.
 | ✅ | Read API: the contract the PWA is written against |
 | ✅ | PWA: login, punch screen, offline queue, service worker |
 | ✅ | HR board: live team status, open alerts, filters |
-| ⬜ | Administration: adjustments, schedules, alert rules |
+| ✅ | Review: decide a flagged punch or an alert, with the reason on the record |
+| ⬜ | Administration: schedules and alert rules |
 | ⬜ | Pilot: the PWA deployed, installed on a machine and starting at sign-in |
 
 ### Known debt

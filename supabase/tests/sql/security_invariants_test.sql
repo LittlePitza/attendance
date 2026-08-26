@@ -81,6 +81,28 @@ begin
     raise exception '% wide-open permissive public policy/policies', violation_count;
   end if;
 
+  -- Writes elevate; reads do not. The published surface is small enough to name
+  -- in full, so the invariant is enforced rather than remembered: adding a
+  -- SECURITY DEFINER read function fails here until somebody writes down why.
+  select count(*)
+    into violation_count
+    from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and (
+          (p.proname in ('my_profile', 'server_time', 'my_day', 'my_history',
+                         'team_day', 'open_alerts', 'employee_day')
+           and p.prosecdef)
+       or (p.proname in ('punch', 'sync_punches', 'heartbeat',
+                         'review_punch', 'decide_alert')
+           and not p.prosecdef)
+     );
+
+  if violation_count > 0 then
+    raise exception
+      '% published function(s) carry the wrong security mode', violation_count;
+  end if;
+
   raise notice 'All local security invariants hold.';
 end
 $invariants$;

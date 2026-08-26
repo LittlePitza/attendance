@@ -1,16 +1,16 @@
 import type { JSX } from 'react';
 import type { Profile } from '../../../lib/types';
-import { IconAlert, IconMark, IconSelf, IconTeam } from './icons';
+import { IconAlert, IconMark, IconReview, IconSelf, IconTeam } from './icons';
 
-export type BoardView = 'team' | 'alerts';
+export type BoardView = 'team' | 'alerts' | 'review';
 
 /**
  * Where you are, who you are, and whether what you are reading is current.
  *
- * Three destinations, and all three exist: the team, the open alerts, and --
- * for somebody who is also an employee -- their own day. Nothing here is a
- * placeholder for a screen that has not been built. A nav item that leads
- * nowhere is worse than a short nav.
+ * Four destinations, and all four exist: the team, the open alerts, the
+ * decisions waiting to be written down, and -- for somebody who is also an
+ * employee -- their own day. Nothing here is a placeholder for a screen that
+ * has not been built. A nav item that leads nowhere is worse than a short nav.
  *
  * The card above the profile is where the reference puts a promotion. It earns
  * the space instead by answering the question a board left open all day
@@ -20,6 +20,7 @@ export function Sidebar({
   view,
   onView,
   alertCount,
+  reviewCount,
   profile,
   loadedAt,
   online,
@@ -29,6 +30,7 @@ export function Sidebar({
   readonly view: BoardView;
   readonly onView: (next: BoardView) => void;
   readonly alertCount: number;
+  readonly reviewCount: number;
   readonly profile: Profile;
   readonly loadedAt: Date | null;
   readonly online: boolean;
@@ -73,6 +75,17 @@ export function Sidebar({
           <IconAlert />
           Alertas
           {alertCount > 0 && <span className="side__count">{alertCount}</span>}
+        </button>
+
+        <button
+          className={`side__link${view === 'review' ? ' side__link--on' : ''}`}
+          type="button"
+          onClick={() => onView('review')}
+          aria-current={view === 'review' ? 'page' : undefined}
+        >
+          <IconReview />
+          Revisión
+          {reviewCount > 0 && <span className="side__count">{reviewCount}</span>}
         </button>
       </nav>
 
