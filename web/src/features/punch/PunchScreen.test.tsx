@@ -8,20 +8,27 @@ import { PunchScreen } from './PunchScreen';
 
 const myDay = vi.fn<() => Promise<MyDay>>();
 const punch = vi.fn();
-const heartbeat = vi.fn();
-const serverTime = vi.fn();
 
 /**
  * The network is the only thing faked. The hooks, the offline queue and the
  * punch action all run for real, so what is under test is the composition an
  * employee actually uses.
+ *
+ * The heartbeat and the clock check are plain functions rather than spies, and
+ * that is load-bearing rather than tidiness. Nothing asserts on either, so a
+ * spy bought nothing -- and `restoreMocks` wipes a spy's implementation between
+ * tests, which made these return `undefined` to a `.catch()` if the effect that
+ * calls them flushed across that boundary. It passed locally and failed on CI,
+ * which is the worst way for a test to be wrong. A function that always returns
+ * a promise cannot be caught mid-restore.
  */
 vi.mock('../../lib/api', () => ({
   api: {
     myDay: () => myDay(),
     punch: (input: unknown) => punch(input),
-    heartbeat: () => heartbeat(),
-    serverTime: () => serverTime(),
+    heartbeat: () => Promise.resolve({}),
+    serverTime: () =>
+      Promise.resolve({ utc: '2026-08-24T15:00:00Z', epoch_ms: 1_787_670_000_000 }),
     syncPunches: () => Promise.resolve({ accepted: 0, rejected: 0, events: [] }),
   },
 }));
@@ -62,10 +69,11 @@ function setOnline(value: boolean): void {
 beforeEach(async () => {
   await clearPendingPunches();
   setOnline(true);
-  heartbeat.mockResolvedValue({});
-  serverTime.mockResolvedValue({ utc: '2026-08-24T15:00:00Z', epoch_ms: 1_787_670_000_000 });
 });
 
+// Only `myDay` and `punch` are spies now, and every test sets up the ones it
+// uses. Resetting between tests is what stops one test's queued answer from
+// being read by the next.
 afterEach(() => {
   vi.resetAllMocks();
 });
