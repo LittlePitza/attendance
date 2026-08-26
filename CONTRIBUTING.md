@@ -105,8 +105,10 @@ decided in SQL, where they survive a deploy, a restart and a Free plan pause.
   leaves the row claimed, and fifteen minutes later another run may send a
   second copy. A duplicate is visible and harmless; a missing notification is
   neither.
-- **It never invents a recipient.** `alert_rules` is empty today, so every
-  notification falls back to `ALERTS_DEFAULT_RECIPIENTS`. With that unset it
+- **It never invents a recipient.** The seven global rows in `alert_rules` all
+  carry a null `recipients`, so every notification still falls back to
+  `ALERTS_DEFAULT_RECIPIENTS` -- **Configuración → Alertas** is where that column
+  finally gets filled. With the fallback unset it
   reports the failure rather than borrowing the help desk's distribution list
   from `config_correo`, which would mail attendance alerts to the IT ticket
   queue -- wrong, and hard to notice.
@@ -565,6 +567,13 @@ select tablename, policyname, cmd from pg_policies
   `(SELECT internal.caller_role() AS rol_actual)`: Postgres froze the output
   alias when the policy was created. The call resolves correctly and behavior is
   identical. Clean it up next time those policies need touching, not before.
+- **The Vercel project settings in the runbook were never applied.** Root
+  Directory is unset, so every production deployment so far has built from the
+  repository root, found nothing to build, finished in about a tenth of a second
+  and served a 404 -- `READY` and empty, which is the combination that does not
+  look like a failure. `web/vercel.json` has been correct the whole time and was
+  never read. The three settings are in [docs/runbook.md](docs/runbook.md); they
+  are dashboard-only, so no deploy fixes them and neither does the Vercel MCP.
 - **Nothing schedules the dispatcher.** `alerts-notify` drains the outbox when
   it is called and no cron job calls it. Scheduling means deciding where the
   function URL and its key live for `pg_net` to use, which is a credential
