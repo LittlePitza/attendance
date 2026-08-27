@@ -152,23 +152,40 @@ The client does not write tables; it calls functions.
 | `team_day(date)` | authenticated | Every employee the caller may see, with their state that day |
 | `open_alerts(since, limit)` | authenticated | Open alerts within the caller's scope |
 | `employee_day(employee, date)` | authenticated | One person's punches and the decision recorded against each |
+| `employee_summary(employee, days)` | authenticated | The same figures `my_summary()` gives, about somebody else |
+| `list_employees()` | hr, admin | The whole roster, people on baja included |
 | `review_punch(punch, decision, reason)` | hr, admin | Records what HR decided about a punch that arrived flagged |
 | `decide_alert(alert, state, note)` | hr, admin | Records what HR decided an alert was worth |
+| `reset_day(employee, reason, date)` | hr, admin | Voids a day's punches and rebuilds its counters. Deletes nothing |
+| `save_employee(...)` | hr, admin | Adds or edits somebody in the shared roster |
+| `retire_employee(employee, reason)` | hr, admin | Baja, and their access with it. Never a `DELETE` |
+| `restore_employee(employee, reason)` | hr, admin | Back to activo. Not back to having an account |
+
+The table is the core the client is written against, not the whole surface: the
+session writers, the summaries and the rest of the administration API are named
+in `security_invariants_test.sql`, which is where the rule below is enforced.
 
 **Writes elevate; reads do not.** `punch`, `sync_punches`, `heartbeat`,
-`review_punch` and `decide_alert` are `SECURITY DEFINER`, because they are the
-only write path and have to hold privileges the caller does not. Everything else
+`review_punch`, `decide_alert`, `reset_day` and the roster writers are
+`SECURITY DEFINER`, because they are the only write path and have to hold
+privileges the caller does not. Everything else
 is `SECURITY INVOKER`, and that is deliberate: `internal.can_view_employee()`
 already decides who sees whom, and the column grants already withhold
 coordinates. A read function that elevated would have to reimplement both and
 could get either wrong. As it stands, a bug in a read function is a bug in what
 is displayed — it cannot become a leak. `security_invariants_test.sql` asserts
-the mode of all twelve, so the rule is enforced rather than remembered.
+the mode of all thirty-four published functions, not only the ones named above,
+so the rule is enforced rather than remembered. `list_accounts()` is the single
+exception and says why in its own migration: the answer lives in `auth.users`
+and `public.user_roles`, which no ordinary caller can reach.
 
-The two writers HR calls take a mandatory reason of at least ten characters and
-land a row in `attendance.audit_events`. Neither ever edits a punch:
+Every writer HR calls takes a mandatory reason of at least ten characters and
+lands a row in `attendance.audit_events`. None of them ever edits a punch:
 `attendance.punches` is append-only, so approving one writes a decision beside
-it rather than changing how it arrived.
+it rather than changing how it arrived — and so does discarding one.
+`reset_day()` is the strongest case: it takes a whole day out of the counters
+and every punch of it is still there afterwards, each with the hour it stopped
+counting and the reason recorded next to it.
 
 ### Roles
 
@@ -285,7 +302,7 @@ npm run db:stop
 
 `db:verify` assembles `.local/supabase`, starts an isolated Postgres container,
 replays the immutable migration history over a synthetic shared-schema baseline,
-loads synthetic seed data, and runs the seven SQL suites. It does
+loads synthetic seed data, and runs the eight SQL suites. It does
 not accept a database URL or a project ref. See
 [docs/local-development.md](docs/local-development.md) for the complete workflow.
 
@@ -376,12 +393,14 @@ moment and cannot be tested against whatever time the suite happens to run:
 Run them only through `npm run db:verify` against the disposable local database.
 The final `ROLLBACK` is defense in depth, not permission to test a live system.
 Verification is complete only when the generated database applies every
-migration and all four SQL suites pass from a clean reset.
+migration and all eight SQL suites pass from a clean reset.
 
-The read-API suite (`supabase/tests/sql/read_api_test.sql`) is the only one that
-switches role. Everything else runs as `postgres`, which owns the tables and so
-bypasses RLS: a policy that filtered nothing would have passed every other check
-here. This one does `set role authenticated`, sets the token claims, and calls:
+Five of the eight switch role: the read, review, administration, sessions and
+workforce suites. The other three run as `postgres`, which owns the tables and
+so bypasses RLS — a policy that filtered nothing would pass every check made
+that way, which is why anything about who may do what is checked as the client.
+Each of the five does `set role authenticated`, sets the token claims, and calls
+the function under test. The read-API suite calls:
 
 - An employee sees themselves and nobody else; a manager sees their department
   and not the one next to it; HR sees everyone. Each scope is checked against a
@@ -424,6 +443,7 @@ short of where the client actually stands.
 | ✅ | HR board: live team status, open alerts, filters |
 | ✅ | Review: decide a flagged punch or an alert, with the reason on the record |
 | ✅ | Administration: accounts, schedules and alert rules |
+| ✅ | Roster: add, edit and retire people; the box behind each name; reset a day |
 | ⬜ | Pilot: the PWA deployed, installed on a machine and starting at sign-in |
 
 ### Known debt
@@ -433,6 +453,11 @@ short of where the client actually stands.
   dismisses it. Closing the gap is one extra condition inside
   `evaluate_alerts()`, not a second evaluator — but until then the alert list
   has predictable noise in it, and that is worth knowing before HR sees it.
+- **`anon` still holds write privileges on 21 `public` tables.** INSERT,
+  UPDATE, DELETE and TRUNCATE, `empleados` among them. Nothing exploits it
+  today because no RLS policy grants the anonymous role anything — but RLS is
+  the only thing stopping it, and `TRUNCATE` does not go through RLS at all.
+  Revoking them is its own migration with its own blast radius over `ti-hub`.
 - **Nothing schedules the dispatcher yet.** `alerts-notify` exists and drains
   the outbox when it is called, but no cron job calls it. Scheduling it means
   storing the function URL and a key for `pg_net` to use, which is a decision

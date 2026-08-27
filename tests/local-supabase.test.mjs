@@ -33,13 +33,14 @@ test('prepareWorkspace creates an isolated local Supabase project', async (t) =>
   assert.match(config, /^project_id = "attendance-local"$/m);
   assert.doesNotMatch(config, new RegExp(productionProjectRef));
   assert.equal(migrations[0], '00000000000000_shared_schema_test_baseline.sql');
-  assert.equal(migrations.length, 17);
+  assert.equal(migrations.length, 18);
   assert.ok(migrations.includes('20260824172955_free_plan_maintenance.sql'));
   assert.ok(migrations.includes('20260825153106_alert_evaluation_and_outbox.sql'));
   assert.ok(migrations.includes('20260825153406_attendance_read_api.sql'));
   assert.ok(migrations.includes('20260826201929_attendance_review_api.sql'));
   assert.ok(migrations.includes('20260826202237_attendance_admin_api.sql'));
   assert.ok(migrations.includes('20260827144253_attendance_sessions_and_stats.sql'));
+  assert.ok(migrations.includes('20260827153301_attendance_workforce_api.sql'));
   assert.equal(
     await readFile(path.join(generatedSupabase, 'seed.sql'), 'utf8'),
     await readFile(path.join(repositoryRoot, 'supabase/tests/fixtures/local_seed.sql'), 'utf8'),
@@ -189,6 +190,7 @@ test('executeLocalCommand verifies a clean local database in a fixed sequence', 
     'review_api_test.sql',
     'admin_api_test.sql',
     'sessions_api_test.sql',
+    'workforce_api_test.sql',
     'security_invariants_test.sql',
   ]);
 });
@@ -223,6 +225,7 @@ test('SQL verification files are plain SQL and local-only', async () => {
   assert.ok(suiteFiles.includes('review_api_test.sql'));
   assert.ok(suiteFiles.includes('admin_api_test.sql'));
   assert.ok(suiteFiles.includes('sessions_api_test.sql'));
+  assert.ok(suiteFiles.includes('workforce_api_test.sql'));
   assert.ok(suiteFiles.includes('security_invariants_test.sql'));
 
   for (const suiteFile of suiteFiles) {

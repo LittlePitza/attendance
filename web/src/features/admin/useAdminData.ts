@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { describeReadFailure } from '../../lib/errors';
-import type { AccountRow, AlertRuleRow, DepartmentRow, ScheduleRow } from '../../lib/types';
+import type {
+  AccountRow,
+  AlertRuleRow,
+  DepartmentRow,
+  EmployeeRow,
+  ScheduleRow,
+} from '../../lib/types';
 
 export interface AdminData {
   readonly accounts: readonly AccountRow[];
+  readonly employees: readonly EmployeeRow[];
   readonly departments: readonly DepartmentRow[];
   readonly schedules: readonly ScheduleRow[];
   readonly rules: readonly AlertRuleRow[];
@@ -16,7 +23,7 @@ export interface AdminData {
 /**
  * The configuration, in one read.
  *
- * Four calls rather than four hooks, and no refresh loop -- deliberately, and
+ * Five calls rather than five hooks, and no refresh loop -- deliberately, and
  * for the opposite reasons to `useTeamDay`. Configuration changes when somebody
  * on this screen changes it, so a timer would only ever reload what the reader
  * just wrote, and would do it underneath a half-filled form. It reloads when
@@ -25,9 +32,13 @@ export interface AdminData {
  * `Promise.all` because a partly loaded screen is worse than a slow one: the
  * account list is read against the department list and the schedule list, and
  * showing one without the others invites a decision made on half the picture.
+ * The roster joins them for the same reason -- it is the list the other four
+ * hang off, and giving somebody access before their record loads is exactly the
+ * decision made on half the picture.
  */
 export function useAdminData(): AdminData {
   const [accounts, setAccounts] = useState<readonly AccountRow[]>([]);
+  const [employees, setEmployees] = useState<readonly EmployeeRow[]>([]);
   const [departments, setDepartments] = useState<readonly DepartmentRow[]>([]);
   const [schedules, setSchedules] = useState<readonly ScheduleRow[]>([]);
   const [rules, setRules] = useState<readonly AlertRuleRow[]>([]);
@@ -36,14 +47,17 @@ export function useAdminData(): AdminData {
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
-      const [nextAccounts, nextDepartments, nextSchedules, nextRules] = await Promise.all([
-        api.listAccounts(),
-        api.listDepartments(),
-        api.listSchedules(),
-        api.listAlertRules(),
-      ]);
+      const [nextAccounts, nextEmployees, nextDepartments, nextSchedules, nextRules] =
+        await Promise.all([
+          api.listAccounts(),
+          api.listEmployees(),
+          api.listDepartments(),
+          api.listSchedules(),
+          api.listAlertRules(),
+        ]);
 
       setAccounts(nextAccounts);
+      setEmployees(nextEmployees);
       setDepartments(nextDepartments);
       setSchedules(nextSchedules);
       setRules(nextRules);
@@ -62,5 +76,5 @@ export function useAdminData(): AdminData {
     void refresh();
   }, [refresh]);
 
-  return { accounts, departments, schedules, rules, error, loading, refresh };
+  return { accounts, employees, departments, schedules, rules, error, loading, refresh };
 }

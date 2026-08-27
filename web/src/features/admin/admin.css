@@ -389,3 +389,131 @@
 .btn--danger:hover:not(:disabled) {
   background: var(--bad-soft);
 }
+
+/* ------------------------------------------------------------ the box --- */
+/*
+ * What one person's record looks like. Four figures, then the weeks, then the
+ * ways the application lost them -- in that order because it is the order the
+ * questions get asked in: how much, over what stretch, and was anything wrong
+ * with how it was recorded.
+ */
+
+.admin__stats {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.admin__stat {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.7rem 0.8rem;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.admin__stat-label {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.admin__stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.admin__stat-note {
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+.admin__section {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.admin__section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* The weeks scroll on their own rather than pushing the page sideways. */
+.admin__weeks {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.admin__weeks th,
+.admin__weeks td {
+  padding: 0.4rem 0.7rem 0.4rem 0;
+  text-align: left;
+  font-weight: 400;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.admin__weeks thead th {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin__weeks tbody th {
+  font-weight: 500;
+}
+
+.admin__weeks td {
+  font-variant-numeric: tabular-nums;
+}
+
+.admin__signals {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin__signal {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.admin__signal-value {
+  font-size: 1.15rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin__signal-label {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+/* The box carries its own title chip beside the name, so the heading wraps. */
+.admin .panel__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}

@@ -89,6 +89,10 @@ function summary(overrides: Partial<MySummary> = {}): MySummary {
     punctuality_pct: null,
     average_entry: null,
     streak_days: 0,
+    offline_days: 0,
+    no_connection_alerts: 0,
+    expired_sessions: 0,
+    weeks: [],
     series: [],
     ...overrides,
   };
