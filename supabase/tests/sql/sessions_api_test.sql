@@ -58,6 +58,7 @@ declare
   v_text      text;
   v_ok        boolean;
   v_workday   uuid;
+  v_swept     uuid;
   v_row       attendance.app_sessions;
 begin
   select id into v_uid1 from auth.users order by created_at, id limit 1;
@@ -334,16 +335,20 @@ begin
 
   -- ==================================================== PHASE F: the sweeper ====
 
-  update attendance.app_sessions
-     set started_at   = now() - interval '2 days',
-         last_seen_at = now() - interval '2 days',
-         ended_at     = null,
-         end_reason   = null
-   where id = v_session;
+  -- On its own device, and that is not incidental. Reopening one of the rows
+  -- above would leave two open sessions for the same account and machine, and
+  -- the partial unique index would refuse it -- which is the index doing its
+  -- job, not a problem to work around.
+  insert into attendance.app_sessions (
+    auth_user_id, employee_id, device_id, started_at, last_seen_at
+  ) values (
+    v_uid1, v_emp1, 'device-swept', now() - interval '2 days', now() - interval '2 days'
+  )
+  returning id into v_swept;
 
   v_closed := attendance.expire_stale_sessions(120);
 
-  select * into v_row from attendance.app_sessions where id = v_session;
+  select * into v_row from attendance.app_sessions where id = v_swept;
 
   insert into test_results(name, expected, got, passed) values
     ('the sweeper closes what stopped reporting', 'expired at last_seen_at',

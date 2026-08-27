@@ -22,6 +22,13 @@ vi.mock('../../lib/api', () => ({
       reviewPunch(id, decision, reason),
     decideAlert: (id: string, state: string, note: string) => decideAlert(id, state, note),
     serverTime: () => Promise.resolve({ utc: '2026-08-24T15:00:00Z', epoch_ms: 1787000000000 }),
+    // A plain function rather than a spy: nothing here asserts on the access
+    // trail, so a spy bought nothing -- and `restoreMocks` wipes a spy's
+    // implementation between tests, which leaves the effect that calls this
+    // holding `undefined` instead of a promise if it flushes across that
+    // boundary. That failure appears only sometimes, which is the worst way for
+    // a test to be wrong.
+    employeeSessions: () => Promise.resolve([]),
   },
 }));
 

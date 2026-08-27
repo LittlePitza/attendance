@@ -1310,6 +1310,63 @@ button.stat:hover {
 }
 
 /* A refusal from the database, in the Spanish the engine wrote. */
+/* ----------------------------------------------------- the access trail --- */
+/*
+ * Where somebody was signed in from on the day being reviewed. Deliberately
+ * quieter than the punches above it: it is context for a decision, not
+ * something to decide on, and nothing in it is pressable.
+ */
+
+.trail {
+  margin-top: 1rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.trail__title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.trail__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trail__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+}
+
+.trail__span {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.trail__device {
+  color: var(--ink-soft);
+}
+
+.trail__ip {
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+}
+
 .review__error {
   margin: 0;
   font-size: 0.85rem;

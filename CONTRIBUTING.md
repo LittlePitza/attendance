@@ -296,6 +296,13 @@ is its own change rather than a column added quietly to this one.
 anybody. That is the point rather than a feature: a log only management can read
 is a log the people in it have no way to check.
 
+`employee_sessions()` puts the same trail under the punches on **Revisión**,
+where a reviewer is deciding what a flagged punch was worth: a clock that was
+minutes out reads differently once the machine it came from is visible. It is
+evidence, never a verdict -- a machine that was open all afternoon does not
+prove anybody was working, and one that was never opened does not prove they
+were not. There is nothing to press on it.
+
 ## What the employee's screen may work out
 
 Nothing. `my_summary()` decides hours against expected, punctuality, the streak
