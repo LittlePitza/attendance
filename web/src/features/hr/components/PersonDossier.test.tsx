@@ -239,6 +239,22 @@ describe('PersonDossier', () => {
     expect(buttons.filter((label) => /anular|revocar|reiniciar|descartar/i.test(label))).toEqual([]);
   });
 
+  it('lists people one per row rather than as a wrapping cloud of chips', () => {
+    draw({ selectedId: null, dossier: null });
+
+    // jsdom has no layout, so what is pinned here is the cause rather than the
+    // symptom: the picker had inherited `.review__list`, a wrapping flex row
+    // that is right for Revisión's handful of short chips and turns a roster of
+    // thirty-one names into ragged pairs. Its own class is a vertical stack.
+    const list = screen.getByRole('list');
+    expect(list).toHaveClass('dossier__people');
+    expect(list).not.toHaveClass('review__list');
+
+    for (const button of screen.getAllByRole('button')) {
+      expect(button).toHaveClass('dossier__person');
+    }
+  });
+
   it('reports a failure instead of drawing an empty person', () => {
     draw({ dossier: null, error: 'No se pudo leer el expediente.' });
 

@@ -2005,3 +2005,78 @@ button.stat:hover {
   font-size: 0.8rem;
   overflow-wrap: anywhere;
 }
+
+/* --- the person picker --- */
+
+/* Not `.review__list`, which is a wrapping flex row. That is right for Revisión,
+ * where the picks are a handful of short chips, and wrong for a roster: thirty-one
+ * names of different lengths wrap into ragged pairs and the column reads as a
+ * word cloud instead of a list.
+ *
+ * One person per row, full width, and capped so the list scrolls inside itself
+ * rather than pushing the record a thousand pixels down the page. */
+.dossier__people {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+  max-height: min(62vh, 36rem);
+  overflow-y: auto;
+  /* Room for the focus ring, which `overflow` would otherwise clip. */
+  padding-right: 2px;
+}
+
+.dossier__person {
+  display: grid;
+  gap: 0.05rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.dossier__person:hover {
+  background: var(--sunken);
+}
+
+.dossier__person:focus-visible {
+  outline: 2px solid var(--solid);
+  outline-offset: -1px;
+}
+
+/* The selected row is the one the panel beside it is about, so it is marked on
+ * the edge nearest that panel rather than outlined all round -- an outline reads
+ * as focus, and the two states have to stay distinguishable. */
+.dossier__person--on {
+  background: var(--sunken);
+  border-color: var(--line);
+  box-shadow: inset 3px 0 0 var(--solid);
+}
+
+.dossier__person-name {
+  font-size: 0.875rem;
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dossier__person-dept {
+  font-size: 0.75rem;
+  /* Not `--ink-faint`: 2.57:1 is not a contrast a control's own label may have.
+   * The board's row labels were moved off it for the same reason. */
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

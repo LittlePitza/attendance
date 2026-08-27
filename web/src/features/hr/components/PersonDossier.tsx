@@ -110,14 +110,14 @@ export function PersonDossier({
         {visible.length === 0 ? (
           <p className="empty">Nadie coincide.</p>
         ) : (
-          <ul className="review__list">
+          <ul className="dossier__people">
             {visible.map((member) => (
               <li key={member.employee_id}>
                 <button
                   className={
                     member.employee_id === selectedId
-                      ? 'review__pick review__pick--on'
-                      : 'review__pick'
+                      ? 'dossier__person dossier__person--on'
+                      : 'dossier__person'
                   }
                   type="button"
                   aria-pressed={member.employee_id === selectedId}
@@ -125,8 +125,8 @@ export function PersonDossier({
                     onSelect(member.employee_id === selectedId ? null : member.employee_id)
                   }
                 >
-                  <span className="review__who">{member.employee_name}</span>
-                  <span className="review__label">
+                  <span className="dossier__person-name">{member.employee_name}</span>
+                  <span className="dossier__person-dept">
                     {member.department ?? 'Sin departamento'}
                   </span>
                 </button>
