@@ -807,13 +807,13 @@ button.stat:hover {
 }
 
 .row__select:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--solid);
   outline-offset: 3px;
 }
 
 .row--on {
   background: var(--sunken);
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 3px 0 0 var(--solid);
 }
 
 .row__who {
@@ -1427,5 +1427,306 @@ button.stat:hover {
 @media (max-width: 68rem) {
   .review {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ================================================================ reports ===
+ * A period rather than a day. It reuses `.stats`, `.pill` and `.alert__stripe`
+ * because they already mean exactly what they mean here; everything below is
+ * what a period needs and a day did not.
+ */
+
+/* The scope picker. A segmented control rather than a `<select>`: there are
+ * three options, they are permanent, and the current one should be readable
+ * without opening anything. */
+.seg {
+  display: inline-flex;
+  padding: 0.15rem;
+  gap: 0.15rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--sunken);
+}
+
+.seg__pick {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.seg__pick:hover {
+  color: var(--ink);
+}
+
+.seg__pick--on {
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 550;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+}
+
+.seg__pick:focus-visible {
+  outline: 2px solid var(--solid);
+  outline-offset: 1px;
+}
+
+.report {
+  display: grid;
+  gap: 1.75rem;
+}
+
+.report__section {
+  display: grid;
+  gap: 0.75rem;
+  /* A grid item defaults to `min-width: auto`, which means "as wide as my
+   * content" -- so a section holding the table would grow to the table's
+   * intrinsic width and take the page sideways with it. `.main` pins this for
+   * the same reason. */
+  min-width: 0;
+}
+
+.report__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* --- the verdicts --- */
+
+.report__verdicts {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report__verdict {
+  display: grid;
+  grid-template-columns: max-content 2.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 0.6rem;
+  background: var(--sunken);
+}
+
+.report__verdict-count {
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-align: right;
+}
+
+.report__verdict-note {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+/* --- who stood out --- */
+
+.report__standouts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.75rem;
+}
+
+.report__standout {
+  display: grid;
+  gap: 0.4rem;
+  align-content: start;
+  padding: 0.85rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 0.7rem;
+}
+
+.report__standout-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.report__standout-note {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+.report__standout-list {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: standout;
+}
+
+.report__standout-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.report__standout-who {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report__standout-value {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+/* The swatch already exists for the chart legend; these are its tones. */
+.swatch--good {
+  background: var(--good);
+}
+
+.swatch--info {
+  background: var(--info);
+}
+
+.swatch--warn {
+  background: var(--warn);
+}
+
+.swatch--bad {
+  background: var(--bad);
+}
+
+/* --- the alerts of the period --- */
+
+.report__alerts {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report__alert {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.7rem 0.5rem 0;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 0.6rem;
+}
+
+.report__alert-body {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.report__alert-kind {
+  font-size: 0.875rem;
+  font-weight: 550;
+}
+
+.report__alert-note {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.report__alert-count {
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 600;
+  padding-right: 0.3rem;
+}
+
+/* --- person by person --- */
+
+/* A dense grid of figures is the one thing on this board that legitimately does
+ * not fit a narrow window. It scrolls inside its own box so the page never
+ * scrolls sideways. */
+.report__scroll {
+  overflow-x: auto;
+  /* Without this the scroll container is sized by the table instead of clamping
+   * it, and `overflow-x` never engages: the box is always big enough. This is
+   * the line that makes the table scroll inside itself rather than the page
+   * scrolling under it. */
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 0.7rem;
+}
+
+.report__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.report__table th,
+.report__table td {
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.report__table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--sunken);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--line);
+}
+
+.report__table tbody tr + tr th,
+.report__table tbody tr + tr td {
+  border-top: 1px solid var(--line-soft);
+}
+
+.report__table tbody th {
+  font-weight: 500;
+}
+
+.report__who {
+  display: block;
+}
+
+.report__dept {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+
+.report__reasons {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  white-space: normal;
+}
+
+@media (max-width: 48rem) {
+  .report__verdict {
+    grid-template-columns: max-content 2.5rem;
+  }
+
+  .report__verdict-note {
+    grid-column: 1 / -1;
   }
 }

@@ -2,13 +2,22 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RpcError } from '../../lib/errors';
-import type { EmployeeSummary, OpenAlert, Profile, TeamMember } from '../../lib/types';
+import type {
+  AttendanceReport,
+  EmployeeSummary,
+  OpenAlert,
+  Profile,
+  ReportScope,
+  TeamMember,
+} from '../../lib/types';
 import { HrDashboard } from './HrDashboard';
 
 const teamDay = vi.fn<() => Promise<TeamMember[]>>();
 const openAlerts = vi.fn<() => Promise<OpenAlert[]>>();
 const employeeSummary = vi.fn<(id: string, days?: number) => Promise<EmployeeSummary>>();
 const employeeSessions = vi.fn<() => Promise<[]>>();
+const attendanceReport =
+  vi.fn<(scope: ReportScope, anchor?: string) => Promise<AttendanceReport>>();
 
 /**
  * Today, in the zone the board itself reads dates in.
@@ -32,6 +41,7 @@ vi.mock('../../lib/api', () => ({
     openAlerts: () => openAlerts(),
     employeeSummary: (id: string, days?: number) => employeeSummary(id, days),
     employeeSessions: () => employeeSessions(),
+    attendanceReport: (scope: ReportScope, anchor?: string) => attendanceReport(scope, anchor),
     serverTime: () => Promise.resolve({ utc: '2026-08-24T15:00:00Z', epoch_ms: 1787000000000 }),
   },
 }));
@@ -117,6 +127,50 @@ function navLink(name: RegExp | string): HTMLElement {
   return within(screen.getByRole('navigation', { name: 'Secciones' })).getByRole('button', { name });
 }
 
+/**
+ * A closed week, so the stepper's forward control is enabled and can be tested.
+ * The panel's own rendering is covered in ReportsPanel.test.tsx; here the report
+ * only has to carry bounds for the stepping assertions to be about.
+ */
+function periodReport(): AttendanceReport {
+  return {
+    server_time: '2026-08-31T12:00:00Z',
+    time_zone: 'America/Mexico_City',
+    scope: 'week',
+    anchor: '2026-08-26',
+    from: '2026-08-24',
+    to: '2026-08-30',
+    days: 7,
+    closed: true,
+    totals: {
+      people: 0,
+      people_home_office: 0,
+      people_met: 0,
+      people_partial: 0,
+      people_missed: 0,
+      people_pending: 0,
+      people_not_scheduled: 0,
+      days_scheduled: 0,
+      days_scheduled_past: 0,
+      days_worked: 0,
+      days_complete: 0,
+      worked_seconds: 0,
+      break_seconds: 0,
+      expected_seconds: 0,
+      expected_seconds_elapsed: 0,
+      late_days: 0,
+      absent_days: 0,
+      incomplete_days: 0,
+      offline_days: 0,
+      alerts_total: 0,
+      punctuality_pct: null,
+    },
+    alerts_by_kind: [],
+    people: [],
+    standouts: { punctual: [], most_late: [], most_absent: [], most_hours: [] },
+  };
+}
+
 beforeEach(() => {
   teamDay.mockResolvedValue([
     member({ employee_id: '1', employee_name: 'Ana Ruiz', state: 'working' }),
@@ -126,6 +180,7 @@ beforeEach(() => {
   openAlerts.mockResolvedValue([]);
   employeeSummary.mockResolvedValue(record());
   employeeSessions.mockResolvedValue([]);
+  attendanceReport.mockResolvedValue(periodReport());
 });
 
 describe('HrDashboard', () => {
@@ -466,5 +521,62 @@ describe('HrDashboard', () => {
     expect(screen.getByRole('button', { name: 'Día siguiente' })).not.toBeDisabled();
     // Yesterday is done with, so the counter says so rather than "todavía".
     expect(screen.getByText('No marcaron')).toBeInTheDocument();
+  });
+  /* -------------------------------------------------------------- reports ---
+   * The panel itself is covered in ReportsPanel.test.tsx. What is checked here
+   * is the one piece of logic the board kept: how a period is stepped.
+   */
+
+  it('asks for nothing until the report is opened', async () => {
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    // A month across everybody is the heaviest query the client makes, and the
+    // board mounts whether or not anybody wants a report.
+    expect(attendanceReport).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: /Reportes/ }));
+
+    await waitFor(() => expect(attendanceReport).toHaveBeenCalledWith('week', undefined));
+  });
+
+  it('steps a period from the bounds the database returned, not by calendar maths', async () => {
+    show();
+    await screen.findByText('Ana Ruiz');
+    await userEvent.click(screen.getByRole('button', { name: /Reportes/ }));
+    await screen.findByText(/24 ago/);
+
+    await userEvent.click(screen.getByRole('button', { name: /Semana anterior/ }));
+
+    // The day before `from`, which is inside the previous period whatever the
+    // scope is and however many days the month had. 31 January plus a month is
+    // the bug this avoids.
+    await waitFor(() => expect(attendanceReport).toHaveBeenLastCalledWith('week', '2026-08-23'));
+
+    await userEvent.click(screen.getByRole('button', { name: /Semana siguiente/ }));
+    await waitFor(() => expect(attendanceReport).toHaveBeenLastCalledWith('week', '2026-08-31'));
+  });
+
+  it('changes the scope without inventing what the new period is', async () => {
+    show();
+    await screen.findByText('Ana Ruiz');
+    await userEvent.click(screen.getByRole('button', { name: /Reportes/ }));
+    await screen.findByText(/24 ago/);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Mes' }));
+
+    // The anchor it already had, and a new scope. The bounds are the database's
+    // to work out.
+    await waitFor(() => expect(attendanceReport).toHaveBeenLastCalledWith('month', undefined));
+  });
+
+  it('hides the day controls on a screen that is not about a day', async () => {
+    show();
+    await screen.findByText('Ana Ruiz');
+    await userEvent.click(screen.getByRole('button', { name: /Reportes/ }));
+    await screen.findByText(/24 ago/);
+
+    expect(screen.queryByRole('button', { name: 'Día anterior' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
   });
 });

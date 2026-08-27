@@ -453,6 +453,9 @@ short of where the client actually stands.
   dismisses it. Closing the gap is one extra condition inside
   `evaluate_alerts()`, not a second evaluator — but until then the alert list
   has predictable noise in it, and that is worth knowing before HR sees it.
+  **Reportes makes the gap visible rather than hiding it**: a scheduled day with
+  no entry is all the record holds, so the column is headed "sin entrada" and
+  the screen says a day authorised looks identical to one nobody explained.
 - **`anon` still holds write privileges on 21 `public` tables.** INSERT,
   UPDATE, DELETE and TRUNCATE, `empleados` among them. Nothing exploits it
   today because no RLS policy grants the anonymous role anything — but RLS is

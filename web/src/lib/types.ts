@@ -647,3 +647,137 @@ export interface EmployeeSummary extends AttendanceSummary {
   readonly employee_name: string;
   readonly employee_state: EmployeeState;
 }
+
+/* ------------------------------------------------------------- The report ---
+ * `attendance_report()` decides every figure here, including the one judgement
+ * in the whole feature: whether somebody met the period. This client renders
+ * the verdict and never reaches it -- the rule lives in the function, written
+ * down, so there is one answer to "cumplió" rather than one per screen.
+ */
+
+export const REPORT_SCOPES = ['day', 'week', 'month'] as const;
+export type ReportScope = (typeof REPORT_SCOPES)[number];
+
+/**
+ * The verdict on one person's period.
+ *
+ * `pending` is not a variant of `met`. A period whose scheduled days are all
+ * still to come has produced no evidence either way, and reporting it as met
+ * would quietly certify a week nobody has worked yet.
+ */
+export const COMPLIANCE_VERDICTS = [
+  'met',
+  'partial',
+  'missed',
+  'pending',
+  'not_scheduled',
+] as const;
+export type ComplianceVerdict = (typeof COMPLIANCE_VERDICTS)[number];
+
+/**
+ * Why a period was not met, as a code and a count.
+ *
+ * Codes rather than sentences, so the wording stays in the screen and anything
+ * else reading the report does not have to parse Spanish to learn why. Only the
+ * reasons that actually happened are present -- a zero here would read as a
+ * reason.
+ */
+export interface ComplianceReason {
+  readonly code: 'absent' | 'late' | 'incomplete' | 'tampered';
+  readonly count: number;
+}
+
+/** One person's period. Alert counts arrive keyed by kind, dismissed ones excluded. */
+export interface ReportPerson {
+  readonly employee_id: string;
+  readonly employee_name: string;
+  readonly department: string | null;
+  readonly employee_state: EmployeeState;
+  readonly days_scheduled: number;
+  /** The scheduled days already past. What the period is actually judged on. */
+  readonly days_scheduled_past: number;
+  /** Days with an entry. Nobody punches from the office, so this is the Home Office count. */
+  readonly days_worked: number;
+  readonly days_complete: number;
+  readonly worked_seconds: number;
+  readonly break_seconds: number;
+  readonly expected_seconds: number;
+  /** What the elapsed part of the period asked for. The deficit is measured against this. */
+  readonly expected_seconds_elapsed: number;
+  readonly deficit_seconds: number;
+  readonly late_days: number;
+  /** Scheduled past days with no entry. Without a leave table, holiday looks identical. */
+  readonly absent_days: number;
+  readonly incomplete_days: number;
+  readonly offline_days: number;
+  readonly punctuality_pct: number | null;
+  readonly average_entry: string | null;
+  readonly alerts_total: number;
+  readonly alerts: Readonly<Partial<Record<AlertKind, number>>>;
+  readonly compliance: ComplianceVerdict;
+  readonly reasons: readonly ComplianceReason[];
+}
+
+export interface ReportAlertKind {
+  readonly kind: AlertKind;
+  readonly severity: AlertSeverity;
+  /** Not dismissed. The number that counts. */
+  readonly total: number;
+  readonly dismissed: number;
+  readonly open: number;
+  readonly people: number;
+}
+
+export interface ReportTotals {
+  readonly people: number;
+  readonly people_home_office: number;
+  readonly people_met: number;
+  readonly people_partial: number;
+  readonly people_missed: number;
+  readonly people_pending: number;
+  readonly people_not_scheduled: number;
+  readonly days_scheduled: number;
+  readonly days_scheduled_past: number;
+  readonly days_worked: number;
+  readonly days_complete: number;
+  readonly worked_seconds: number;
+  readonly break_seconds: number;
+  readonly expected_seconds: number;
+  readonly expected_seconds_elapsed: number;
+  readonly late_days: number;
+  readonly absent_days: number;
+  readonly incomplete_days: number;
+  readonly offline_days: number;
+  readonly alerts_total: number;
+  readonly punctuality_pct: number | null;
+}
+
+/** One person on a standout list, with whatever figure put them there. */
+export interface ReportStandout {
+  readonly employee_id: string;
+  readonly employee_name: string;
+  readonly value: number;
+}
+
+export interface ReportStandouts {
+  readonly punctual: readonly ReportStandout[];
+  readonly most_late: readonly ReportStandout[];
+  readonly most_absent: readonly ReportStandout[];
+  readonly most_hours: readonly ReportStandout[];
+}
+
+export interface AttendanceReport {
+  readonly server_time: string;
+  readonly time_zone: string;
+  readonly scope: ReportScope;
+  readonly anchor: string;
+  readonly from: string;
+  readonly to: string;
+  readonly days: number;
+  /** The period has finished. A week still running is not a week anybody failed. */
+  readonly closed: boolean;
+  readonly totals: ReportTotals;
+  readonly alerts_by_kind: readonly ReportAlertKind[];
+  readonly people: readonly ReportPerson[];
+  readonly standouts: ReportStandouts;
+}

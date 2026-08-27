@@ -8,6 +8,7 @@ import type {
   AlertRuleRow,
   AppSession,
   AssignableRole,
+  AttendanceReport,
   ClosableReason,
   CloseSessionResult,
   DepartmentRow,
@@ -28,6 +29,7 @@ import type {
   PunchDecision,
   PunchKind,
   PunchResult,
+  ReportScope,
   ResetDayResult,
   ReviewResult,
   SavedEmployee,
@@ -404,6 +406,20 @@ export const api = {
     rpc<EmployeeSummary>('employee_summary', {
       p_employee_id: employeeId,
       ...(days === undefined ? {} : { p_days: days }),
+    }),
+
+  /**
+   * One period across everybody the caller may see.
+   *
+   * The anchor is any date inside the period, never its bounds: what a week or a
+   * month *is* gets decided in `attendance_report()`, where the zone is known
+   * and a week starts on Monday. Sending computed bounds from here is how the
+   * browser would end up owning that rule.
+   */
+  attendanceReport: (scope: ReportScope, anchor?: string): Promise<AttendanceReport> =>
+    rpc<AttendanceReport>('attendance_report', {
+      p_scope: scope,
+      ...(anchor === undefined ? {} : { p_anchor: anchor }),
     }),
 
   /**

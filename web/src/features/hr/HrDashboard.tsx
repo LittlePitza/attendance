@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'rea
 import { AdminPanel } from '../admin/AdminPanel';
 import { useOnline } from '../../hooks/useOnline';
 import { storedClockSkewMs } from '../../lib/clock';
-import type { CallerRole, Profile, WorkdayState } from '../../lib/types';
+import type { CallerRole, Profile, ReportScope, WorkdayState } from '../../lib/types';
 import { useClockSkew } from '../punch/useClockSkew';
 import { AlertsPanel } from './components/AlertsPanel';
 import { ArrivalsChart } from './components/ArrivalsChart';
@@ -21,6 +21,7 @@ import {
 import { Sidebar, type BoardView } from './components/Sidebar';
 import { StatCard } from './components/StatCard';
 import { TeamBoard } from './components/TeamBoard';
+import { ReportsPanel } from './components/ReportsPanel';
 import { TEAM_RECORD_ID, TeamMemberRecord } from './components/TeamMemberRecord';
 import './hr.css';
 import { formatClock, formatLongDate, plural } from './labels';
@@ -37,6 +38,7 @@ import {
 } from './summary';
 import { useEmployeeDay } from './useEmployeeDay';
 import { useOpenAlerts } from './useOpenAlerts';
+import { useReport } from './useReport';
 import { useTeamDay } from './useTeamDay';
 
 /**
@@ -81,12 +83,15 @@ export function HrDashboard({
   const [countableOnly, setCountableOnly] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [reviewing, setReviewing] = useState<string | null>(null);
+  const [reportScope, setReportScope] = useState<ReportScope>('week');
+  const [reportAnchor, setReportAnchor] = useState<string | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { team, error, loading, loadedAt, refresh } = useTeamDay(date, online);
   const alerts = useOpenAlerts(date, online);
   const employeeDay = useEmployeeDay(reviewing, date);
+  const period = useReport(reportScope, reportAnchor, view === 'reports');
 
   // The board is read by one person in one place, which is the same assumption
   // `team_day()` makes when it resolves its date. The browser's zone is that
@@ -212,6 +217,28 @@ export function HrDashboard({
     setState((current) => (current === next ? 'all' : next));
   }, []);
 
+  /**
+   * Stepping a period, using the bounds the database returned rather than
+   * calendar arithmetic done here.
+   *
+   * The day before a period's first day is always inside the previous period,
+   * and the day after its last is always inside the next one -- whatever the
+   * scope and however many days the month happened to have. Adding a month to
+   * an anchor in the browser is where 31 January becomes a bug.
+   */
+  const stepPeriod = useCallback(
+    (direction: -1 | 1): void => {
+      const bounds = period.report;
+      if (bounds === null) {
+        return;
+      }
+      const edge = new Date(`${direction === -1 ? bounds.from : bounds.to}T00:00:00Z`);
+      edge.setUTCDate(edge.getUTCDate() + direction);
+      setReportAnchor(edge.toISOString().slice(0, 10));
+    },
+    [period.report],
+  );
+
   const clearFilters = useCallback((): void => {
     setState('all');
     setDepartment('all');
@@ -241,7 +268,10 @@ export function HrDashboard({
     state !== 'all' || department !== 'all' || homeOfficeOnly || query !== '';
   // The configuration screen is not a view of a day, so the day's counters and
   // its toolbar have nothing to say about it.
-  const configuring = view === 'admin';
+  // Neither the configuration screen nor the report is a view of a day, so the
+  // day's counters, its search box and its date stepper have nothing to say
+  // about either. The report carries its own period control instead.
+  const dayScoped = view === 'team' || view === 'alerts' || view === 'review';
 
   return (
     <div className={`hr${sidebarOpen ? ' hr--open' : ''}`}>
@@ -270,7 +300,7 @@ export function HrDashboard({
             <IconMenu />
           </button>
 
-          {!configuring && (
+          {dayScoped && (
             <label className="search">
               <span className="search__icon">
                 <IconSearch />
@@ -292,7 +322,7 @@ export function HrDashboard({
 
           <span className="topbar__spacer" />
 
-          <div className="panel__tools" role="group" aria-label="Cambiar de día" hidden={configuring}>
+          <div className="panel__tools" role="group" aria-label="Cambiar de día" hidden={!dayScoped}>
             <button
               className="btn btn--icon"
               type="button"
@@ -337,7 +367,7 @@ export function HrDashboard({
             </p>
           )}
 
-          {!configuring && (
+          {dayScoped && (
           <section className="stats" aria-label="Resumen del día">
             <StatCard
               index={0}
@@ -548,6 +578,17 @@ export function HrDashboard({
 
               <AlertsPanel alerts={visibleAlerts} timeZone={timeZone} boardDate={shownDate} />
             </section>
+          ) : view === 'reports' ? (
+            <ReportsPanel
+              report={period.report}
+              scope={reportScope}
+              onScope={setReportScope}
+              onStep={stepPeriod}
+              onToday={() => setReportAnchor(null)}
+              atLatest={period.report !== null && !period.report.closed}
+              error={period.error}
+              loading={period.loading}
+            />
           ) : view === 'review' ? (
             <ReviewPanel
               team={team}

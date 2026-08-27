@@ -21,6 +21,7 @@ const sqlSuites = [
   'admin_api_test.sql',
   'sessions_api_test.sql',
   'workforce_api_test.sql',
+  'reports_api_test.sql',
   'security_invariants_test.sql',
 ];
 const usage =

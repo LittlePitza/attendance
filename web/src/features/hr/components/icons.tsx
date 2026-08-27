@@ -160,6 +160,16 @@ export const IconReview = (): JSX.Element => (
   </Glyph>
 );
 
+/** Bars on a baseline: a period summed up rather than a day watched. */
+export const IconReport = (): JSX.Element => (
+  <Glyph>
+    <g>
+      <path d="M4 19.5h16" />
+      <path d="M7 19.5v-6M12 19.5V8M17 19.5v-9" />
+    </g>
+  </Glyph>
+);
+
 export const IconSettings = (): JSX.Element => (
   <Glyph>
     <g>

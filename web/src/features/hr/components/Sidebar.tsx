@@ -1,14 +1,23 @@
 import type { JSX } from 'react';
 import type { Profile } from '../../../lib/types';
-import { IconAlert, IconMark, IconReview, IconSelf, IconSettings, IconTeam } from './icons';
+import {
+  IconAlert,
+  IconMark,
+  IconReport,
+  IconReview,
+  IconSelf,
+  IconSettings,
+  IconTeam,
+} from './icons';
 
-export type BoardView = 'team' | 'alerts' | 'review' | 'admin';
+export type BoardView = 'team' | 'alerts' | 'review' | 'reports' | 'admin';
 
 /**
  * Where you are, who you are, and whether what you are reading is current.
  *
- * Five destinations, and all five exist: the team, the open alerts, the
- * decisions waiting to be written down, the configuration behind all of it, and
+ * Six destinations, and all six exist: the team, the open alerts, the
+ * decisions waiting to be written down, the period a supervisor reports on,
+ * the configuration behind all of it, and
  * -- for somebody who is also an employee -- their own day. Nothing here is a
  * placeholder for a screen that has not been built. A nav item that leads
  * nowhere is worse than a short nav.
@@ -94,6 +103,16 @@ export function Sidebar({
           <IconReview />
           Revisión
           {reviewCount > 0 && <span className="side__count">{reviewCount}</span>}
+        </button>
+
+        <button
+          className={`side__link${view === 'reports' ? ' side__link--on' : ''}`}
+          type="button"
+          onClick={() => onView('reports')}
+          aria-current={view === 'reports' ? 'page' : undefined}
+        >
+          <IconReport />
+          Reportes
         </button>
 
         {canAdminister && (

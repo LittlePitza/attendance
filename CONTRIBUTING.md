@@ -205,6 +205,41 @@ facts the database already reported; lateness arrives as a `late_entry` alert.
 It also offers no way to close one, because an alert is a record of what
 happened rather than a notification to clear.
 
+**What the board counts, it counts on purpose.** Not everybody punches every
+day -- some days are worked from the office, and this system only ever sees the
+Home Office ones. That makes an absence evidence of nothing, so `missing_entry`,
+`missing_exit` and `break_exceeded` step aside by default. Two kinds survive,
+for opposite reasons: `late_entry` is a recorded fact, and `clock_tampered` is
+the one alert somebody had to cause on purpose. The ones that step aside are
+counted where they were hidden and one press brings them back -- an alert that
+vanishes without trace is how an alert gets lost.
+
+**Reportes is the same rule over a period instead of a day.** `attendance_report()`
+takes a scope -- `day`, `week` or `month` -- and an anchor, and resolves the
+bounds itself: "this week" has a wrong answer available in a browser (a Sunday
+start, or the reader's zone instead of the employee's) and none in SQL, where
+`date_trunc('week', ...)` is ISO. Stepping a period uses the bounds the answer
+carried rather than calendar arithmetic, because the day before a period's first
+day is inside the previous one whatever the scope and however many days the
+month had.
+
+It carries **the one judgement in the whole client's data**, and it is made in
+SQL and written down there: whether somebody met the period. `met`, `partial`,
+`missed`, plus `pending` for a period whose scheduled days have not happened yet
+and `not_scheduled` for one nothing was asked of. `pending` is not a variant of
+`met` -- certifying a week nobody has worked is the failure a compliance figure
+actually has -- and a period still running is measured against the part of it
+that is over, or a Tuesday reports three days of the calendar as a deficit. The
+reasons come back as codes with counts, never as sentences, so the wording stays
+in the screen.
+
+**It does not re-derive a single figure.** `internal.resolved_days()` decides
+what one day was worth for one person, and `internal.attendance_summary()` and
+`attendance_report()` are both callers of it. Two implementations would disagree
+about the same person invisibly -- the board's box and the report would each show
+a number and only one would be right -- so `reports_api_test.sql` compares them
+directly.
+
 The role decides which screen opens and nothing else. `team_day()` and
 `open_alerts()` are `SECURITY INVOKER`, so a manager gets their department and
 HR gets everyone without a single role check in the browser -- a role tampered
@@ -487,8 +522,8 @@ ignored globally and never appears in `git status`.
    over REST: `my_profile()`, `server_time()`, `punch()`, `sync_punches()`,
    `heartbeat()`, `open_session()`, `touch_session()`, `close_session()`,
    `my_day()`, `my_history()`, `my_summary()`, `my_sessions()`, `team_day()`,
-   `open_alerts()` and `employee_sessions()` -- plus the review and
-   administration functions HR reaches.
+   `open_alerts()`, `employee_sessions()` and `attendance_report()` -- plus the
+   review and administration functions HR reaches.
 
    The advisors flag `punch`, `sync_punches`, `heartbeat` and the three session
    writers as "SECURITY DEFINER executable by authenticated": **that is the
@@ -763,7 +798,11 @@ select tablename, policyname, cmd from pg_policies
 - **There is no leave or absence table.** Somebody on holiday collects a
   `missing_entry` every day until one exists, and HR dismisses each by hand on
   **Revisión**. Closing it is one extra condition inside `evaluate_alerts()`, not
-  a second evaluator.
+  a second evaluator. **Reportes is where the gap is now visible**: a scheduled
+  day with no entry is all the record holds, so approved holiday and simply not
+  appearing are the same row. The column is headed "sin entrada" rather than
+  "faltas" and the screen says so, because the honest label is the one the data
+  can support -- but somebody reading a month still has to contrast it by hand.
 - **`anon` still holds INSERT, UPDATE, DELETE and TRUNCATE on 21 `public`
   tables**, `empleados` among them. Nothing exploits it today because no RLS
   policy grants the anonymous role anything -- but RLS is the only thing
