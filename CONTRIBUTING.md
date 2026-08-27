@@ -233,6 +233,17 @@ that is over, or a Tuesday reports three days of the calendar as a deficit. The
 reasons come back as codes with counts, never as sentences, so the wording stays
 in the screen.
 
+**A report is only about people who can punch.** Of the 31 on the roster, the
+ones without an account have no way to clock in, so a period cannot report them
+as absent from it -- there was never anything to be absent from. That is the
+population `attendance.evaluate_alerts()` already watches, in its own words:
+somebody who cannot punch cannot be late. Keeping the two identical is the
+point; a report and an evaluator disagreeing about who is in scope would be two
+answers to one question. Not everybody works Home Office, and onboarding
+somebody is what puts them in both. A workday inside the window keeps somebody
+who has since been given de baja -- `retire_employee()` unlinks the account, and
+their days should not leave with it.
+
 **It does not re-derive a single figure.** `internal.resolved_days()` decides
 what one day was worth for one person, and `internal.attendance_summary()` and
 `attendance_report()` are both callers of it. Two implementations would disagree

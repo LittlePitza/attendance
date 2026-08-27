@@ -572,6 +572,28 @@ begin
      coalesce(v_result ->> 'no_connection_alerts', 'null'),
      (v_result ->> 'no_connection_alerts')::integer = 0);
 
+  -- Every day of the range carries a number for what was expected of it,
+  -- scheduled or not. The shared resolution briefly returned null on an
+  -- unscheduled day, which the totals hid completely -- a sum treats a 0 and a
+  -- skipped null identically -- while `series[].expected_seconds` is published
+  -- per day and typed as a number by both screens that read it.
+  select count(*)::integer into v_count
+    from jsonb_array_elements(v_result -> 'series') as s
+   where s.value ->> 'expected_seconds' is null;
+
+  insert into test_results(name, expected, got, passed) values
+    ('no day of the range reports a null expectation', '0', v_count::text, v_count = 0);
+
+  -- And on a day nothing was scheduled it is 0 rather than the hours of some
+  -- other day. `scheduled` is the field that says whether anything was asked.
+  select count(*)::integer into v_count
+    from jsonb_array_elements(v_result -> 'series') as s
+   where (s.value ->> 'scheduled')::boolean is false
+     and (s.value ->> 'expected_seconds')::integer <> 0;
+
+  insert into test_results(name, expected, got, passed) values
+    ('an unscheduled day expects nothing, stated as zero', '0', v_count::text, v_count = 0);
+
   -- The weeks are ISO weeks in the employee's own zone, which is the whole
   -- reason they are grouped here and not in the browser.
   select count(*)::integer into v_count

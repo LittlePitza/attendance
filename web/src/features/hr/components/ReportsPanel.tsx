@@ -30,6 +30,10 @@ import { IconAlert, IconChevron, IconDone, IconOffline, IconTeam } from './icons
  * and an anchor, never a pair of dates, because "this week" has a wrong answer
  * available here and none there.
  *
+ * Who a report is about is decided there too: only people with an account, which
+ * is the population `evaluate_alerts()` watches. Somebody who cannot punch
+ * cannot be late, and most of the roster does not work Home Office at all.
+ *
  * The one thing it decides is what to *draw*, and two of those choices are worth
  * naming. A period still running is never presented as a result, because it is
  * not one. And absences are labelled as days with no entry rather than as days
@@ -145,7 +149,7 @@ function Figures({
       <Figure
         label="Home Office"
         value={String(totals.people_home_office)}
-        caption={`de ${plural(totals.people, 'persona', 'personas')} en el periodo`}
+        caption={`de ${plural(totals.people, 'persona', 'personas')} con acceso`}
         icon={<IconTeam />}
       />
       <Figure
@@ -365,9 +369,11 @@ function People({ people }: { readonly people: readonly ReportPerson[] }): JSX.E
         * somebody did not appear are the same row, and a column headed "faltas"
         * would be asserting the difference. */}
       <p className="note" role="note">
-        «Sin entrada» son días programados que ya pasaron y no tienen ningún marcaje. Todavía no
-        hay registro de vacaciones ni permisos, así que un día autorizado se ve igual que una
-        ausencia: hay que contrastarlo a mano.
+        Solo aparecen las personas con cuenta: quien no puede marcar no puede llegar tarde ni
+        faltar, y no todo el padrón trabaja en Home Office. «Sin entrada» son días programados
+        que ya pasaron y no tienen ningún marcaje — todavía no hay registro de vacaciones ni
+        permisos, así que un día autorizado se ve igual que una ausencia y hay que contrastarlo
+        a mano.
       </p>
 
       {people.length === 0 ? (

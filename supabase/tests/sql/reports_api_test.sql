@@ -18,6 +18,15 @@
 --   partial_person <- punched the same two days, and carries a `late_entry`.
 --   missed_person  <- scheduled those days and never punched at all.
 --   pending_person <- scheduled only from tomorrow, so nothing is yet knowable.
+--   no_access      <- on the roster, covered by the global schedule, and with no
+--                     account. Not working Home Office, so not in a report
+--                     about it.
+--
+-- **All four of the judged cast have an account**, because a report only counts
+-- people who can actually punch -- the population `evaluate_alerts()` watches,
+-- for the reason it gives: somebody who cannot punch cannot be late. Without
+-- accounts the report would correctly return an empty period and every
+-- assertion below would be vacuous.
 --
 -- The caller is an 'hr' account with no `empleados` row -- the administrative
 -- account the roles table already allows for. That keeps the population exactly
@@ -73,8 +82,13 @@ declare
   v_missed  uuid := '30000000-0000-4000-8000-0000000000c3';
   v_pending uuid := '30000000-0000-4000-8000-0000000000c4';
 
-  v_uid_hr  uuid := gen_random_uuid();
-  v_uid_emp uuid := gen_random_uuid();
+  v_noaccess uuid := '30000000-0000-4000-8000-0000000000c6';
+
+  v_uid_hr   uuid := gen_random_uuid();
+  v_uid_emp  uuid := gen_random_uuid();
+  v_uid_met  uuid := gen_random_uuid();
+  v_uid_miss uuid := gen_random_uuid();
+  v_uid_pend uuid := gen_random_uuid();
 
   v_dept    uuid;
   v_zone    text;
@@ -99,19 +113,26 @@ begin
   v_zone := 'America/Mexico_City';
 
   insert into auth.users (id, email, raw_user_meta_data) values
-    (v_uid_hr,  'reports.hr@example.invalid',       '{}'::jsonb),
-    (v_uid_emp, 'reports.employee@example.invalid', '{}'::jsonb);
+    (v_uid_hr,   'reports.hr@example.invalid',       '{}'::jsonb),
+    (v_uid_emp,  'reports.employee@example.invalid', '{}'::jsonb),
+    (v_uid_met,  'reports.met@example.invalid',      '{}'::jsonb),
+    (v_uid_miss, 'reports.missed@example.invalid',   '{}'::jsonb),
+    (v_uid_pend, 'reports.pending@example.invalid',  '{}'::jsonb);
 
   insert into public.empleados
     (id, nombre, correo, puesto, estado, department_id, auth_user_id)
   values
     (v_met,     'Ana Cumplida',    'reports.met@example.invalid',
-     'Analista', 'activo', v_dept, null),
+     'Analista', 'activo', v_dept, v_uid_met),
     (v_partial, 'Beto Retrasado',  'reports.partial@example.invalid',
      'Analista', 'activo', v_dept, v_uid_emp),
     (v_missed,  'Carla Ausente',   'reports.missed@example.invalid',
-     'Analista', 'activo', v_dept, null),
+     'Analista', 'activo', v_dept, v_uid_miss),
     (v_pending, 'Dora Pendiente',  'reports.pending@example.invalid',
+     'Analista', 'activo', v_dept, v_uid_pend),
+    -- On the roster, scheduled by the global row, and with no way to sign in.
+    -- Not working Home Office, so not in a report about it.
+    (v_noaccess, 'Fito Sin Acceso', 'reports.noaccess@example.invalid',
      'Analista', 'activo', v_dept, null);
 
   -- The seed's own people are given de baja for the duration. They have no day
@@ -119,7 +140,7 @@ begin
   -- totals can be asserted as absolute numbers. Nothing sticks: the transaction
   -- ends in ROLLBACK.
   update public.empleados set estado = 'baja'
-   where id not in (v_met, v_partial, v_missed, v_pending);
+   where id not in (v_met, v_partial, v_missed, v_pending, v_noaccess);
 
   insert into public.user_roles (auth_user_id, role, note) values
     (v_uid_hr,  'hr',       'Synthetic HR for the reports suite'),
@@ -352,6 +373,21 @@ begin
      (v_person ->> 'compliance') = 'not_scheduled');
 
   -- ===================================================== PHASE C: the roll-up ===
+
+  -- Nobody without a way in is in the report, and the count says four rather
+  -- than five even though five people are on the roster and scheduled.
+  insert into test_results(name, expected, got, passed) values
+    ('only the people who can punch are in the period', '4',
+     coalesce(v_report -> 'totals' ->> 'people', 'null'),
+     (v_report -> 'totals' ->> 'people')::integer = 4);
+
+  select count(*)::integer into v_count
+    from jsonb_array_elements(v_report -> 'people') as p
+   where (p.value ->> 'employee_id')::uuid = v_noaccess;
+
+  insert into test_results(name, expected, got, passed) values
+    ('somebody with no account is left out, not reported absent', '0',
+     v_count::text, v_count = 0);
 
   insert into test_results(name, expected, got, passed) values
     ('the people who registered an entry are the Home Office count', '2',

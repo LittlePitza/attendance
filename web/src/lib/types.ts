@@ -729,6 +729,7 @@ export interface ReportAlertKind {
 }
 
 export interface ReportTotals {
+  /** People with an account. The roster is larger; most of it does not punch. */
   readonly people: number;
   readonly people_home_office: number;
   readonly people_met: number;
