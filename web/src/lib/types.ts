@@ -63,13 +63,25 @@ export interface MyDay {
    * The same totals with the stretch that is still running included, and the
    * instant it has been running from. The screen ticks forward from
    * `server_time` between refreshes; it never decides which counter is running.
+   *
+   * **Optional, and not because the contract is vague.** A deploy and a
+   * migration are never atomic: between the bundle going live and the migration
+   * being applied there is a window in which a browser running this code is
+   * talking to a database whose `my_day()` predates these five fields. Typed as
+   * present, that window renders `NaN` on the largest figure on the screen.
+   * Typed as absent, `liveCounters` falls back to the settled counters above --
+   * which is exactly the old behaviour, and a counter that does not move is a
+   * far better thing to ship for ten minutes than a counter that says `NaN`.
+   *
+   * They are not optional in the database. Nothing here should treat the
+   * fallback as a supported state to design against.
    */
-  readonly counting: CountingKind | null;
-  readonly counting_since: string | null;
-  readonly worked_seconds_live: number;
-  readonly break_seconds_live: number;
+  readonly counting?: CountingKind | null;
+  readonly counting_since?: string | null;
+  readonly worked_seconds_live?: number;
+  readonly break_seconds_live?: number;
   /** Working seconds today's schedule asks for. Null on a day it does not cover. */
-  readonly expected_seconds: number | null;
+  readonly expected_seconds?: number | null;
   readonly opened_at: string | null;
   readonly closed_at: string | null;
   readonly last_heartbeat: string | null;

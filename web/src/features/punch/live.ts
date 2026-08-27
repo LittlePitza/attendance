@@ -1,4 +1,4 @@
-import type { MyDay, MySummary, SummaryDay } from '../../lib/types';
+import type { CountingKind, MyDay, MySummary, SummaryDay } from '../../lib/types';
 
 /**
  * Everything the punch screen shows that is not a field of an answer.
@@ -41,13 +41,33 @@ export interface LiveCounters {
 export function liveCounters(day: MyDay, fetchedAtMs: number, nowMs: number): LiveCounters {
   const elapsed = Math.max(0, Math.round((nowMs - fetchedAtMs) / 1000));
 
-  const worked = day.worked_seconds_live + (day.counting === 'worked' ? elapsed : 0);
-  const paused = day.break_seconds_live + (day.counting === 'break' ? elapsed : 0);
+  // A database that predates these fields sends none of them, which happens for
+  // as long as it takes a merged deploy to be followed by its migration. Falling
+  // back to the settled counters is the behaviour this screen had before they
+  // existed: the figure stops moving between punches, which is wrong but
+  // readable. Reading them as present would put `NaN` in the middle of the ring.
+  const counting = runningCounter(day);
+  const worked = (day.worked_seconds_live ?? day.worked_seconds)
+    + (counting === 'worked' ? elapsed : 0);
+  const paused = (day.break_seconds_live ?? day.break_seconds)
+    + (counting === 'break' ? elapsed : 0);
 
-  const expected = day.expected_seconds;
+  const expected = day.expected_seconds ?? null;
   const progress = expected === null || expected <= 0 ? null : worked / expected;
 
   return { worked, paused, progress };
+}
+
+/**
+ * Which counter the database says is running, or nothing.
+ *
+ * The one place that answers the question, so the fallback above and the display
+ * below cannot disagree about it. `??` rather than a truthiness check: `null`
+ * from the database and an absent field both mean "nothing is running", and
+ * neither is the screen deciding.
+ */
+export function runningCounter(day: MyDay): CountingKind | null {
+  return day.counting ?? null;
 }
 
 /**
