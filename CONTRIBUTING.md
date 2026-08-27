@@ -579,9 +579,9 @@ ignored globally and never appears in `git status`.
    `report_session_event()` -- plus the review and administration functions HR
    reaches.
 
-   The advisors flag `punch`, `sync_punches`, `heartbeat` and the three session
-   writers as "SECURITY DEFINER executable by authenticated": **that is the
-   design**, not a finding. They are the only write path, so they must elevate
+   The advisors flag `punch`, `sync_punches`, `heartbeat`, the three session
+   writers and `report_session_event` as "SECURITY DEFINER executable by
+   authenticated": **that is the design**, not a finding. They are the only write path, so they must elevate
    privileges.
 
 8. **Wrap calls in `(select ...)` inside RLS policies**:
