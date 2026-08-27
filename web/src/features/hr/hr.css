@@ -1212,6 +1212,22 @@ button.stat:hover {
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
 }
 
+/* The same two-column shell, weighted the other way.
+ *
+ * Revisión puts a day's punches on the left and a short decision form on the
+ * right, so the left is the wide one. A dossier is the opposite shape: the left
+ * is a list of names and the right is everything the record holds, and inheriting
+ * `3fr 2fr` left the detail in 416px of a 1280px window. */
+.review--dossier {
+  grid-template-columns: minmax(13rem, 1fr) minmax(0, 3fr);
+}
+
+@media (max-width: 68rem) {
+  .review--dossier {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .review__list {
   display: flex;
   flex-wrap: wrap;
@@ -1729,4 +1745,263 @@ button.stat:hover {
   .report__verdict-note {
     grid-column: 1 / -1;
   }
+}
+
+/* =============================================================== dossier ===
+ * One person in full. It reuses `.pill`, `.alert__stripe`, `.swatch` and the
+ * `.review` two-column shell, because all four already mean here what they mean
+ * elsewhere. Everything below is what a page about one person needs and a board
+ * about one day did not.
+ */
+
+/* Every one of these grids pins `min-width: 0`. A grid item is sized by its
+ * content unless told otherwise, so a section holding a wide table grows to the
+ * table's intrinsic width and takes the page sideways with it -- the bug the
+ * report's own scroll box was shipped with once already. `.main` pins it for the
+ * same reason. */
+.dossier,
+.dossier__section {
+  min-width: 0;
+}
+
+.dossier {
+  display: grid;
+  gap: 1.75rem;
+}
+
+.dossier__section {
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+}
+
+.dossier__title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.dossier__note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+/* The search box inside a panel, rather than the one in the top bar. */
+.search--panel {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search--panel .field {
+  width: 100%;
+  padding-left: 2.1rem;
+}
+
+/* --- wide things scroll inside themselves, never under the page --- */
+
+.dossier__scroll {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 0.7rem;
+}
+
+.dossier__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.dossier__table th,
+.dossier__table td {
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.dossier__table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--sunken);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--line);
+}
+
+.dossier__table tbody tr + tr th,
+.dossier__table tbody tr + tr td {
+  border-top: 1px solid var(--line-soft);
+}
+
+.dossier__table tbody th {
+  font-weight: 500;
+}
+
+/* A voided punch stays visible and reads as withdrawn. Hiding it would leave a
+ * zeroed counter with nothing to explain it. */
+.dossier__table tbody tr.is-void th,
+.dossier__table tbody tr.is-void td {
+  color: var(--ink-faint);
+}
+
+.dossier__ip {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.dossier__void {
+  display: block;
+  margin-top: 0.2rem;
+  max-width: 22rem;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  white-space: normal;
+}
+
+/* --- connectivity --- */
+
+.dossier__events {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dossier__event {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.45rem;
+  font-size: 0.82rem;
+}
+
+.dossier__event:nth-child(odd) {
+  background: var(--sunken);
+}
+
+.dossier__event-kind {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dossier__event-when {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+/* --- devices --- */
+
+.dossier__devices {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dossier__device {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 0.6rem;
+}
+
+.dossier__device-agent {
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.dossier__device-span {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+/* --- alerts --- */
+
+.dossier__alerts {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dossier__alert {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.6rem 0.45rem 0;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 0.55rem;
+}
+
+.dossier__alert-body {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.dossier__alert-kind {
+  font-size: 0.82rem;
+  font-weight: 550;
+}
+
+.dossier__alert-note {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+/* --- what somebody changed --- */
+
+.dossier__changes {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dossier__change {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.55rem 0.7rem;
+  border-left: 3px solid var(--warn);
+  border-radius: 0 0.55rem 0.55rem 0;
+  background: var(--sunken);
+}
+
+.dossier__change-kind {
+  font-size: 0.82rem;
+  font-weight: 550;
+}
+
+.dossier__change-when {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+/* The mandatory reason. It is the point of the adjustments table, so it is not
+ * truncated. */
+.dossier__change-why {
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
 }

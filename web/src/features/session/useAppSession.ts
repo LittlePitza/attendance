@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { closeSessionOnUnload, describeDevice } from '../../lib/session';
 import type { ClosableReason } from '../../lib/types';
+import { drainEvents, noteEvent } from './connectivity';
 
 /**
  * Five minutes, matching `useHeartbeat`. The sweeper in Postgres closes a
@@ -42,6 +43,19 @@ export interface AppSessionState {
  * the consequence is a session closed at its last known moment instead of its
  * real one. Interrupting somebody's shift with an error about bookkeeping would
  * be the worse trade.
+ *
+ * **What it also records now is the middle.** The three endings above said when a
+ * session stopped; none of them could say why the application was unreachable
+ * for twenty minutes while it stayed open, and `last_seen_at` going stale and
+ * coming back leaves a row that looks exactly like one never interrupted. The
+ * connectivity observations close that, and the reason they go through a buffer
+ * rather than straight out is that the one worth having -- the connection
+ * dropping -- is the one that cannot be sent when it happens.
+ *
+ * It records observations, never intent. A person who closed the window, one
+ * whose laptop lost power and one who pulled the cable on purpose all arrive as
+ * the same silence, and nothing here pretends to tell them apart. What the log
+ * gives is what surrounded it.
  */
 export function useAppSession(enabled: boolean): AppSessionState {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -56,6 +70,11 @@ export function useAppSession(enabled: boolean): AppSessionState {
     current.current = result.session_id;
     setSessionId(result.session_id);
     setDeviceRevoked(result.device_revoked);
+
+    // A connection that dropped and took the tab with it left its observation in
+    // storage, where it has been waiting for a session to report into. This is
+    // that session -- which is why the buffer outlives the page.
+    void drainEvents(result.session_id).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -91,7 +110,27 @@ export function useAppSession(enabled: boolean): AppSessionState {
 
     const onVisible = (): void => {
       if (document.visibilityState === 'visible') {
+        // A backgrounded tab is throttled by the browser, so a gap in reports
+        // that follows one of these is explained rather than suspicious. That is
+        // the whole value of recording it.
+        noteEvent('foregrounded');
         report();
+      } else {
+        noteEvent('backgrounded');
+      }
+    };
+
+    // Written down, not sent: there is no connection to send it on. The moment
+    // is the device's to remember, and `drain` carries it out on the way back.
+    const onOffline = (): void => noteEvent('connection_lost');
+
+    const onOnline = (): void => {
+      noteEvent('connection_back');
+      report();
+
+      const id = current.current;
+      if (id !== null) {
+        void drainEvents(id).catch(() => undefined);
       }
     };
 
@@ -107,14 +146,16 @@ export function useAppSession(enabled: boolean): AppSessionState {
 
     const timer = window.setInterval(report, KEEPALIVE_INTERVAL_MS);
     document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('online', report);
+    window.addEventListener('offline', onOffline);
+    window.addEventListener('online', onOnline);
     window.addEventListener('pagehide', onUnload);
 
     return () => {
       cancelled = true;
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('online', report);
+      window.removeEventListener('offline', onOffline);
+      window.removeEventListener('online', onOnline);
       window.removeEventListener('pagehide', onUnload);
       // The session is deliberately NOT closed here. This runs on every
       // StrictMode remount in development and on every route change, neither of

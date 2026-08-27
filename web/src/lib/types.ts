@@ -225,6 +225,15 @@ export type PunchDecision = (typeof PUNCH_DECISIONS)[number];
 
 /** What HR may record an alert was worth. Never back to `open`. */
 export const ALERT_DECISIONS = ['acknowledged', 'resolved', 'dismissed'] as const;
+
+/**
+ * Every state a stored alert can be in, which is the three decisions plus the
+ * one nobody chose. `open_alerts()` only ever returns `open`, so this had no
+ * reader until the dossier -- which shows a person's whole history and would
+ * make somebody forgiven twenty times look spotless if it hid the rest.
+ */
+export const ALERT_STATES = ['open', 'acknowledged', 'resolved', 'dismissed'] as const;
+export type AlertState = (typeof ALERT_STATES)[number];
 export type AlertDecision = (typeof ALERT_DECISIONS)[number];
 
 /** The decision in force on a punch, or null while nobody has made one. */
@@ -781,4 +790,152 @@ export interface AttendanceReport {
   readonly alerts_by_kind: readonly ReportAlertKind[];
   readonly people: readonly ReportPerson[];
   readonly standouts: ReportStandouts;
+}
+
+/* --------------------------------------------------- The connectivity log ---
+ * What happened *during* a session. `app_sessions` says when somebody started
+ * and stopped; these say why the application was unreachable in between.
+ *
+ * The whole design turns on one fact: **an offline event cannot be sent while
+ * offline.** So the device buffers it and reports it on reconnection, and the
+ * row carries both clocks -- `occurred_at` is when the server heard it and
+ * `client_reported_at` is when the device says it happened. The same division
+ * `punches.client_reported_at` already makes, for the same reason.
+ */
+
+export const SESSION_EVENT_KINDS = [
+  'connection_lost',
+  'connection_back',
+  'backgrounded',
+  'foregrounded',
+  'request_failed',
+] as const;
+export type SessionEventKind = (typeof SESSION_EVENT_KINDS)[number];
+
+export interface SessionEvent {
+  readonly id: string;
+  readonly session_id: string;
+  readonly kind: SessionEventKind;
+  /** When the server heard it. Later than the fact for exactly the events that matter most. */
+  readonly occurred_at: string;
+  /** When the device says it happened. Null when the two are the same moment. */
+  readonly client_reported_at: string | null;
+  readonly detail: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * The answer to `report_session_event()`.
+ *
+ * `recorded: false` is not an error. A buffer flushed after a reconnection can
+ * name a session the sweeper has since closed, and a device has no way to know
+ * that -- so it is reported back rather than raised, and the client drops the
+ * event instead of retrying it for the life of the installation.
+ */
+export interface SessionEventResult {
+  readonly recorded: boolean;
+  readonly event_id?: string;
+  readonly reason?: 'unknown_session' | 'unknown_kind';
+}
+
+/* ---------------------------------------------------------- The dossier ---
+ * Everything the database knows about one person. Its figures are
+ * `employee_summary()`'s figures -- the dossier calls it rather than deriving a
+ * second opinion, so the person's own screen, the board's box and this page can
+ * never disagree about the same person.
+ */
+
+export interface DossierEmployee {
+  readonly employee_id: string;
+  readonly employee_name: string;
+  readonly email: string;
+  readonly job_title: string | null;
+  readonly department: string | null;
+  readonly state: EmployeeState;
+  readonly time_zone: string;
+  /** Whether they can punch at all. An empty dossier is puzzling without it. */
+  readonly has_account: boolean;
+}
+
+export interface DossierSession {
+  readonly id: string;
+  readonly started_at: string;
+  readonly last_seen_at: string;
+  readonly ended_at: string | null;
+  /**
+   * How it ended. `sign_out` and `app_closed` were said out loud; `expired`
+   * means nothing was heard again and the sweeper stamped it at the last
+   * report. `expired` is not evidence of anything deliberate.
+   */
+  readonly end_reason: SessionEndReason | null;
+  readonly seconds: number;
+  readonly ip: string | null;
+  readonly platform: string | null;
+  readonly time_zone: string | null;
+  readonly app_version: string | null;
+  readonly device_id: string;
+}
+
+export interface DossierDevice {
+  readonly device_id: string;
+  readonly user_agent: string | null;
+  readonly first_seen_at: string;
+  /** Overwritten on every visit. One row per machine, not a history. */
+  readonly last_seen_at: string;
+  readonly revoked_at: string | null;
+}
+
+/** Every alert in the range, whatever its state -- the difference from `open_alerts()`. */
+export interface DossierAlert {
+  readonly id: string;
+  readonly alert_date: string;
+  readonly kind: AlertKind;
+  readonly severity: AlertSeverity;
+  readonly state: AlertState;
+  readonly details: Readonly<Record<string, unknown>>;
+  readonly note: string | null;
+  readonly created_at: string;
+}
+
+/** What somebody decided about this person's record, with the mandatory reason. */
+export interface DossierAdjustment {
+  readonly id: string;
+  readonly kind: string;
+  readonly reason: string;
+  readonly work_date: string;
+  readonly old_value: string | null;
+  readonly new_value: string | null;
+  readonly created_at: string;
+  /** Null when the account is not an employee -- the administrative one is not. */
+  readonly actor: string | null;
+}
+
+export interface DossierPunch {
+  readonly id: string;
+  readonly work_date: string;
+  readonly kind: PunchKind;
+  readonly occurred_at: string;
+  readonly client_reported_at: string | null;
+  readonly source: 'online' | 'offline';
+  readonly needs_review: boolean;
+  /** Set when an adjustment stopped this punch counting. `void` is this being non-null. */
+  readonly voided_at: string | null;
+  readonly void_reason: string | null;
+}
+
+export interface EmployeeDossier {
+  readonly server_time: string;
+  readonly days: number;
+  readonly from: string;
+  readonly to: string;
+  readonly employee: DossierEmployee;
+  readonly summary: EmployeeSummary;
+  readonly sessions: readonly DossierSession[];
+  readonly devices: readonly DossierDevice[];
+  readonly alerts: readonly DossierAlert[];
+  readonly adjustments: readonly DossierAdjustment[];
+  readonly connectivity: {
+    readonly counts: Readonly<Partial<Record<SessionEventKind, number>>>;
+    readonly items: readonly SessionEvent[];
+  };
+  readonly punches: readonly DossierPunch[];
 }

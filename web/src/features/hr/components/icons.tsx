@@ -160,6 +160,16 @@ export const IconReview = (): JSX.Element => (
   </Glyph>
 );
 
+/** One person, singled out: the file rather than the roster. */
+export const IconPerson = (): JSX.Element => (
+  <Glyph>
+    <g>
+      <circle cx="12" cy="8.2" r="3.6" />
+      <path d="M5.2 20c0-3.4 3-6 6.8-6s6.8 2.6 6.8 6" />
+    </g>
+  </Glyph>
+);
+
 /** Bars on a baseline: a period summed up rather than a day watched. */
 export const IconReport = (): JSX.Element => (
   <Glyph>

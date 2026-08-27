@@ -256,6 +256,26 @@ The role decides which screen opens and nothing else. `team_day()` and
 HR gets everyone without a single role check in the browser -- a role tampered
 with in devtools changes what is offered, never what comes back.
 
+**Expedientes is one person, in as much detail as the record holds.** The board
+shows a day, the report shows a period, and neither answered "show me this
+person" -- which meant opening four screens and reading a fifth in the SQL
+editor. `employee_dossier()` assembles it in one read, and one read rather than
+six is the point: six requests each fail on their own and leave a page where an
+empty device list could mean no devices or a failed call. Its figures are
+`employee_summary()`'s figures -- the function calls it rather than deriving a
+second opinion, so the employee's own screen, the board's box and this page
+cannot disagree about the same person. What it adds is the six trails the summary
+does not carry: sessions with where they came from, devices, **every alert
+whatever its state** (the difference from `open_alerts()` -- a page that hid the
+dismissed ones would make somebody forgiven twenty times look spotless), what HR
+changed and the reason they had to give, the connectivity gaps, and the marks
+themselves with the hour any of them stopped counting.
+
+**There is nothing to press on it.** Resetting a day, editing the roster and
+revoking a device are administrative writes and they stay on the screens that
+own them. A page assembled from six sources is the worst place for a button: the
+reader cannot tell which of the six a press will change.
+
 **The administration screen** (`web/src/features/admin/`) is the one place in
 the client where somebody types, and it is why `attendance.schedules`,
 `attendance.alert_rules`, `public.user_roles` and now `public.empleados` are no
@@ -371,6 +391,27 @@ session that never said goodbye ended at are all resolved in
 `public.open_session()` -- which is why opening twice produces one row, why a
 window closed and reopened within two minutes rejoins the session it left, and
 why a machine quiet for more than two hours starts a new one.
+
+**And now what happened in the middle.** `app_sessions` could say when somebody
+started and stopped; it could not say why the application was unreachable
+between 11:20 and 11:45 while it stayed open, because `last_seen_at` goes stale
+and comes back and the row afterwards looks exactly like one never interrupted.
+`attendance.session_events` closes that, and the whole design turns on one fact:
+**an offline event cannot be sent while offline.** The device writes it down --
+in `localStorage`, so a drop that takes the tab with it is still recorded -- and
+reports it on reconnection, carrying its own timestamp. `occurred_at` is when the
+server heard, `client_reported_at` is when the device says it happened, and that
+is the division `attendance.punches` already makes for the same reason.
+
+It records observations, never intent. Somebody who closed the window, somebody
+whose laptop lost power and somebody who pulled the cable on purpose all arrive
+as the same silence, and no `kind` pretends to tell them apart. What the log
+gives is what surrounded it: a session that ended `expired` with a
+`connection_lost` as its last event was unreachable before it died, and one that
+ended `expired` right after a `foregrounded` simply stopped mid-use. HR draws
+the conclusion. The buffer is capped at forty and reports how many it dropped,
+so a machine that flapped for an hour says its trail is partial rather than
+looking complete.
 
 **A session that was never closed is stamped at `last_seen_at`, never at
 `now()`.** The last thing anybody knows is the last report; stamping the moment
@@ -533,8 +574,10 @@ ignored globally and never appears in `git status`.
    over REST: `my_profile()`, `server_time()`, `punch()`, `sync_punches()`,
    `heartbeat()`, `open_session()`, `touch_session()`, `close_session()`,
    `my_day()`, `my_history()`, `my_summary()`, `my_sessions()`, `team_day()`,
-   `open_alerts()`, `employee_sessions()` and `attendance_report()` -- plus the
-   review and administration functions HR reaches.
+   `open_alerts()`, `employee_sessions()`, `attendance_report()`,
+   `employee_dossier()`, `employee_session_events()` and
+   `report_session_event()` -- plus the review and administration functions HR
+   reaches.
 
    The advisors flag `punch`, `sync_punches`, `heartbeat` and the three session
    writers as "SECURITY DEFINER executable by authenticated": **that is the

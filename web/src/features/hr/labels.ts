@@ -2,8 +2,11 @@ import type {
   AlertDecision,
   AlertKind,
   AlertSeverity,
+  AlertState,
   PunchDecision,
   PunchKind,
+  SessionEndReason,
+  SessionEventKind,
   WorkdayState,
 } from '../../lib/types';
 
@@ -68,6 +71,59 @@ export const ALERT_LABELS: Readonly<Record<AlertKind, string>> = {
 };
 
 /** `27000` becomes `7:30`, which is how a working day is read at a glance. */
+/**
+ * How a session ended, in words.
+ *
+ * `expired` is the careful one. It means nothing was heard from the device
+ * again, and the sweeper stamped the row at the last report -- which is
+ * compatible with a closed lid, a dead battery, a lost network and somebody
+ * killing the application, and distinguishes none of them. The label says what
+ * is known rather than guessing at intent.
+ */
+export const END_REASON_LABELS: Readonly<Record<SessionEndReason, string>> = {
+  sign_out: 'Cerró sesión',
+  app_closed: 'Cerró la aplicación',
+  expired: 'Dejó de reportarse',
+};
+
+export const END_REASON_MEANING: Readonly<Record<SessionEndReason, string>> = {
+  sign_out: 'Pulsó salir. La hora es exacta.',
+  app_closed: 'La ventana se cerró y alcanzó a avisar.',
+  expired:
+    'No se volvió a saber del equipo. La hora es la del último reporte, no la del cierre: ' +
+    'puede ser una tapa cerrada, una batería agotada, la red caída o la aplicación detenida.',
+};
+
+/** What the device observed during a session. */
+export const SESSION_EVENT_LABELS: Readonly<Record<SessionEventKind, string>> = {
+  connection_lost: 'Perdió la conexión',
+  connection_back: 'Recuperó la conexión',
+  backgrounded: 'Pasó a segundo plano',
+  foregrounded: 'Volvió al frente',
+  request_failed: 'Un reporte falló',
+};
+
+export const ALERT_STATE_LABELS: Readonly<Record<AlertState, string>> = {
+  open: 'Abierta',
+  acknowledged: 'Vista',
+  resolved: 'Resuelta',
+  dismissed: 'Descartada',
+};
+
+/**
+ * The adjustment kinds. Two of the five are not implemented -- `correct_time`
+ * and `add_punch` invent a timestamp nobody punched -- and they are named here
+ * anyway, because a row of one could exist in a record written before this
+ * screen did, and an unlabelled kind is worse than an unused label.
+ */
+export const ADJUSTMENT_LABELS: Readonly<Record<string, string>> = {
+  void_punch: 'Marcaje anulado',
+  approve_offline: 'Marcaje sin conexión aprobado',
+  reject_offline: 'Marcaje sin conexión rechazado',
+  correct_time: 'Hora corregida',
+  add_punch: 'Marcaje agregado',
+};
+
 export function formatClock(totalSeconds: number): string {
   const safe = Math.max(0, Math.trunc(totalSeconds));
   const hours = Math.floor(safe / 3600);

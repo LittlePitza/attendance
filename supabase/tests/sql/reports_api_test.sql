@@ -563,6 +563,104 @@ begin
   insert into test_results(name, expected, got, passed) values
     ('the shared resolution stayed out of public', '0', v_count::text, v_count = 0);
 
+  -- ================================================= PHASE G: the dossier ===
+  -- Everything about one person, and the claim that matters: it is not a second
+  -- opinion. Its figures are `employee_summary()`'s figures, which are
+  -- `internal.attendance_summary()`'s, which is what the employee's own screen
+  -- reads. Three screens showing three numbers about one person is the failure
+  -- this is built to avoid.
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
+  v_report  := public.employee_dossier(v_partial, 30);
+  v_summary := public.employee_summary(v_partial, 30);
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('the dossier agrees with the summary about the hours',
+     coalesce(v_summary ->> 'worked_seconds', 'null'),
+     coalesce(v_report -> 'summary' ->> 'worked_seconds', 'null'),
+     (v_report -> 'summary' ->> 'worked_seconds') = (v_summary ->> 'worked_seconds'));
+
+  insert into test_results(name, expected, got, passed) values
+    ('and about the punctuality',
+     coalesce(v_summary ->> 'punctuality_pct', 'null'),
+     coalesce(v_report -> 'summary' ->> 'punctuality_pct', 'null'),
+     (v_report -> 'summary' ->> 'punctuality_pct')
+       is not distinct from (v_summary ->> 'punctuality_pct'));
+
+  insert into test_results(name, expected, got, passed) values
+    ('it says whether the person can punch at all', 'true',
+     coalesce(v_report -> 'employee' ->> 'has_account', 'null'),
+     (v_report -> 'employee' ->> 'has_account')::boolean);
+
+  -- The four punches of each day, over the range rather than for one day.
+  select jsonb_array_length(v_report -> 'punches') into v_count;
+
+  insert into test_results(name, expected, got, passed) values
+    ('the marks themselves are there, over the whole range', '8',
+     v_count::text, v_count = 8);
+
+  -- Every alert whatever its state, which is the difference from
+  -- `open_alerts()`. By this point in the file the late_entry has been
+  -- dismissed, and a page that hid it would make somebody forgiven look
+  -- spotless.
+  select count(*)::integer into v_count
+    from jsonb_array_elements(v_report -> 'alerts') as a
+   where a.value ->> 'state' = 'dismissed';
+
+  insert into test_results(name, expected, got, passed) values
+    ('an alert HR dealt with is still in the history', '1', v_count::text, v_count = 1);
+
+  -- A day that was reset leaves its reason on the person's page.
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
+  perform public.reset_day(v_partial, 'Prueba del expediente por persona', v_d1);
+  v_report := public.employee_dossier(v_partial, 30);
+  perform set_config('role', 'postgres', true);
+
+  select count(*)::integer into v_count
+    from jsonb_array_elements(v_report -> 'adjustments') as a
+   where a.value ->> 'kind' = 'void_punch';
+
+  insert into test_results(name, expected, got, passed) values
+    ('what HR changed is on the page, with its reason', '4',
+     v_count::text, v_count = 4);
+
+  -- Marked with the adjustment that stopped it, and its reason, rather than
+  -- hidden or reduced to a boolean.
+  select count(*)::integer into v_count
+    from jsonb_array_elements(v_report -> 'punches') as p
+   where p.value ->> 'voided_at' is not null
+     and p.value ->> 'void_reason' = 'Prueba del expediente por persona';
+
+  insert into test_results(name, expected, got, passed) values
+    ('a punch that stopped counting carries why, not just that', '4',
+     v_count::text, v_count = 4);
+
+  -- The refusal, and why it is a refusal rather than empty arrays: zeros and
+  -- empty lists read as "this person has done nothing".
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid_emp)::text, true);
+  begin
+    perform public.employee_dossier(v_met, 30);
+    v_ok := false; v_text := 'it answered';
+  exception when others then
+    v_ok := true; v_text := left(sqlerrm, 45);
+  end;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('an employee asking about a colleague is refused, not given empty lists',
+     'refused', v_text, v_ok);
+
+  select count(*)::integer into v_count
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'employee_dossier' and p.prosecdef;
+
+  insert into test_results(name, expected, got, passed) values
+    ('the dossier invokes', '0', v_count::text, v_count = 0);
+
   -- ============================================================== restore ===
   update public.empleados set auth_user_id = null
    where id in (v_met, v_partial, v_missed, v_pending);

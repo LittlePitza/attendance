@@ -9,6 +9,7 @@ import type {
   AppSession,
   AssignableRole,
   AttendanceReport,
+  EmployeeDossier,
   ClosableReason,
   CloseSessionResult,
   DepartmentRow,
@@ -30,6 +31,9 @@ import type {
   PunchKind,
   PunchResult,
   ReportScope,
+  SessionEvent,
+  SessionEventKind,
+  SessionEventResult,
   ResetDayResult,
   ReviewResult,
   SavedEmployee,
@@ -420,6 +424,57 @@ export const api = {
     rpc<AttendanceReport>('attendance_report', {
       p_scope: scope,
       ...(anchor === undefined ? {} : { p_anchor: anchor }),
+    }),
+
+  /**
+   * Everything about one person over a range.
+   *
+   * Its figures are `employeeSummary`'s figures -- the database calls that
+   * function rather than deriving a second opinion -- so this adds the trails
+   * around them: sessions, devices, every alert, what HR changed, the
+   * connectivity gaps and the marks themselves.
+   */
+  employeeDossier: (employeeId: string, days?: number): Promise<EmployeeDossier> =>
+    rpc<EmployeeDossier>('employee_dossier', {
+      p_employee_id: employeeId,
+      ...(days === undefined ? {} : { p_days: days }),
+    }),
+
+  /**
+   * One thing the device observed inside its own session.
+   *
+   * `client_reported_at` is the point of the call: a `connection_lost` cannot be
+   * sent while the connection is lost, so it is buffered and reported later, and
+   * the device's clock is the only one that saw the moment. The answer's
+   * `recorded: false` is not a failure -- it means the session is gone or the
+   * kind is unknown, and either way the event should be dropped rather than
+   * retried for ever.
+   */
+  reportSessionEvent: (
+    sessionId: string,
+    kind: SessionEventKind,
+    clientReportedAt?: string,
+    detail?: Readonly<Record<string, unknown>>,
+  ): Promise<SessionEventResult> =>
+    rpc<SessionEventResult>('report_session_event', {
+      p_session_id: sessionId,
+      p_kind: kind,
+      ...(clientReportedAt === undefined ? {} : { p_client_reported_at: clientReportedAt }),
+      ...(detail === undefined ? {} : { p_detail: detail }),
+    }),
+
+  /** One person's connectivity and visibility trail, newest first. */
+  employeeSessionEvents: (
+    employeeId: string,
+    from?: string,
+    to?: string,
+    limit?: number,
+  ): Promise<SessionEvent[]> =>
+    rpc<SessionEvent[]>('employee_session_events', {
+      p_employee_id: employeeId,
+      ...(from === undefined ? {} : { p_from: from }),
+      ...(to === undefined ? {} : { p_to: to }),
+      ...(limit === undefined ? {} : { p_limit: limit }),
     }),
 
   /**

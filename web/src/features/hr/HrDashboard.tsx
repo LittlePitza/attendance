@@ -21,6 +21,7 @@ import {
 import { Sidebar, type BoardView } from './components/Sidebar';
 import { StatCard } from './components/StatCard';
 import { TeamBoard } from './components/TeamBoard';
+import { PersonDossier } from './components/PersonDossier';
 import { ReportsPanel } from './components/ReportsPanel';
 import { TEAM_RECORD_ID, TeamMemberRecord } from './components/TeamMemberRecord';
 import './hr.css';
@@ -38,6 +39,7 @@ import {
 } from './summary';
 import { useEmployeeDay } from './useEmployeeDay';
 import { useOpenAlerts } from './useOpenAlerts';
+import { useDossier } from './useDossier';
 import { useReport } from './useReport';
 import { useTeamDay } from './useTeamDay';
 
@@ -85,6 +87,8 @@ export function HrDashboard({
   const [reviewing, setReviewing] = useState<string | null>(null);
   const [reportScope, setReportScope] = useState<ReportScope>('week');
   const [reportAnchor, setReportAnchor] = useState<string | null>(null);
+  const [dossierId, setDossierId] = useState<string | null>(null);
+  const [dossierDays, setDossierDays] = useState(30);
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -92,6 +96,7 @@ export function HrDashboard({
   const alerts = useOpenAlerts(date, online);
   const employeeDay = useEmployeeDay(reviewing, date);
   const period = useReport(reportScope, reportAnchor, view === 'reports');
+  const dossier = useDossier(view === 'people' ? dossierId : null, dossierDays);
 
   // The board is read by one person in one place, which is the same assumption
   // `team_day()` makes when it resolves its date. The browser's zone is that
@@ -588,6 +593,18 @@ export function HrDashboard({
               atLatest={period.report !== null && !period.report.closed}
               error={period.error}
               loading={period.loading}
+            />
+          ) : view === 'people' ? (
+            <PersonDossier
+              team={team}
+              selectedId={dossierId}
+              onSelect={setDossierId}
+              dossier={dossier.dossier}
+              error={dossier.error}
+              loading={dossier.loading}
+              days={dossierDays}
+              onDays={setDossierDays}
+              timeZone={timeZone}
             />
           ) : view === 'review' ? (
             <ReviewPanel

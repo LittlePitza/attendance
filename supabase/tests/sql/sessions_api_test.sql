@@ -590,6 +590,115 @@ begin
     ('an account with no employee record is refused', 'Esta cuenta no esta ligada...',
      v_text, v_ok and v_text like 'Esta cuenta%');
 
+  -- ============================================= PHASE J: what happened inside ==
+  -- `app_sessions` says when a session began and ended. It cannot say why the
+  -- application was unreachable for twenty minutes in the middle of one, and
+  -- `session_events` is what closes that. The event that matters most is the one
+  -- that cannot be sent when it happens.
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid1)::text, true);
+  v_result := public.open_session('events-test-device', 'Windows', v_zone, 'es-MX', '1.0.0');
+  v_session := (v_result ->> 'session_id')::uuid;
+
+  -- The device noticed it was offline at a moment it could not tell anybody
+  -- about, and says so on reconnection. That is the whole reason
+  -- `client_reported_at` exists here.
+  v_other := public.report_session_event(
+    v_session, 'connection_lost', now() - interval '20 minutes',
+    jsonb_build_object('seconds', 1200));
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('a connectivity event is recorded', 'true',
+     coalesce(v_other ->> 'recorded', 'null'), (v_other ->> 'recorded')::boolean);
+
+  select ev.occurred_at > ev.client_reported_at into v_ok
+    from attendance.session_events ev
+   where ev.session_id = v_session and ev.kind = 'connection_lost';
+
+  insert into test_results(name, expected, got, passed) values
+    ('the server heard it later than the device saw it', 'true',
+     coalesce(v_ok::text, 'null'), v_ok);
+
+  -- The event is attributed to the person without the reader having to join
+  -- back through the session, which is what the denormalised column is for.
+  select count(*)::integer into v_count
+    from attendance.session_events ev
+   where ev.session_id = v_session and ev.employee_id = v_emp1;
+
+  insert into test_results(name, expected, got, passed) values
+    ('the event knows whose it is', '1', v_count::text, v_count = 1);
+
+  -- A kind this version does not know about is reported back, not raised. The
+  -- bundle can be ahead of the migration, and a raise would make the client
+  -- retry a flush that can never succeed.
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid1)::text, true);
+  v_other := public.report_session_event(v_session, 'teleported');
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('an unknown kind is refused softly, not raised', 'unknown_kind',
+     coalesce(v_other ->> 'reason', 'null'),
+     (v_other ->> 'recorded')::boolean is false
+       and (v_other ->> 'reason') = 'unknown_kind');
+
+  -- Somebody else's session is not theirs to write into, and the answer says so
+  -- rather than raising -- a flush naming a session the sweeper closed is the
+  -- same shape and must not loop.
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid2)::text, true);
+  v_other := public.report_session_event(v_session, 'connection_back');
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('a session that is not yours records nothing', 'unknown_session',
+     coalesce(v_other ->> 'reason', 'null'),
+     (v_other ->> 'recorded')::boolean is false
+       and (v_other ->> 'reason') = 'unknown_session');
+
+  -- Reporting an event is also hearing from the device, so the session's own
+  -- clock moves. Otherwise a machine that only ever reported blips would be
+  -- swept away as quiet.
+  select s.last_seen_at >= s.started_at into v_ok
+    from attendance.app_sessions s where s.id = v_session;
+
+  insert into test_results(name, expected, got, passed) values
+    ('an event counts as hearing from the device', 'true',
+     coalesce(v_ok::text, 'null'), v_ok);
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid1)::text, true);
+  select count(*)::integer into v_count
+    from public.employee_session_events(v_emp1, null, null, 100);
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('the trail reads back for the person it belongs to', '1', v_count::text, v_count = 1);
+
+  -- The client writes no table, here as everywhere.
+  select count(*)::integer into v_count
+    from information_schema.role_table_grants
+   where grantee = 'authenticated'
+     and table_schema = 'attendance'
+     and table_name = 'session_events'
+     and privilege_type <> 'SELECT';
+
+  insert into test_results(name, expected, got, passed) values
+    ('the client cannot write the event log', '0', v_count::text, v_count = 0);
+
+  -- The writer elevates and the reader does not, which is the rule for every
+  -- pair in this schema.
+  select count(*)::integer into v_count
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and ((p.proname = 'report_session_event'     and not p.prosecdef)
+       or (p.proname = 'employee_session_events'  and     p.prosecdef));
+
+  insert into test_results(name, expected, got, passed) values
+    ('the writer elevates and the reader invokes', '0', v_count::text, v_count = 0);
+
   -- ============================================================== restore ===
   update public.empleados set auth_user_id = null where id in (v_emp1, v_emp2);
 end

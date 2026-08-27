@@ -3,6 +3,7 @@ import type { Profile } from '../../../lib/types';
 import {
   IconAlert,
   IconMark,
+  IconPerson,
   IconReport,
   IconReview,
   IconSelf,
@@ -10,14 +11,14 @@ import {
   IconTeam,
 } from './icons';
 
-export type BoardView = 'team' | 'alerts' | 'review' | 'reports' | 'admin';
+export type BoardView = 'team' | 'alerts' | 'review' | 'reports' | 'people' | 'admin';
 
 /**
  * Where you are, who you are, and whether what you are reading is current.
  *
- * Six destinations, and all six exist: the team, the open alerts, the
+ * Seven destinations, and all seven exist: the team, the open alerts, the
  * decisions waiting to be written down, the period a supervisor reports on,
- * the configuration behind all of it, and
+ * one person in full, the configuration behind all of it, and
  * -- for somebody who is also an employee -- their own day. Nothing here is a
  * placeholder for a screen that has not been built. A nav item that leads
  * nowhere is worse than a short nav.
@@ -113,6 +114,16 @@ export function Sidebar({
         >
           <IconReport />
           Reportes
+        </button>
+
+        <button
+          className={`side__link${view === 'people' ? ' side__link--on' : ''}`}
+          type="button"
+          onClick={() => onView('people')}
+          aria-current={view === 'people' ? 'page' : undefined}
+        >
+          <IconPerson />
+          Expedientes
         </button>
 
         {canAdminister && (
