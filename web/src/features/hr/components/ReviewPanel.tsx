@@ -3,6 +3,7 @@ import { api } from '../../../lib/api';
 import { describeReadFailure } from '../../../lib/errors';
 import type {
   AlertDecision,
+  AppSession,
   EmployeeDay,
   OpenAlert,
   PunchDecision,
@@ -19,7 +20,8 @@ import {
   formatTime,
   plural,
 } from '../labels';
-import { IconAlert, IconReview } from './icons';
+import { useEmployeeSessions } from '../useEmployeeSessions';
+import { IconAlert, IconClock, IconReview } from './icons';
 
 /** The database refuses anything shorter, and says so. Saying so first is kinder. */
 const MIN_REASON = 10;
@@ -124,6 +126,7 @@ function PunchEvidence({
   readonly onDecided: () => void;
 }): JSX.Element {
   const pending = day.punches.filter((punch) => punch.needs_review);
+  const access = useEmployeeSessions(day.employee_id, day.date);
 
   return (
     <div className="review__day">
@@ -142,6 +145,79 @@ function PunchEvidence({
               timeZone={timeZone}
               onDecided={onDecided}
             />
+          ))}
+        </ul>
+      )}
+
+      <SessionTrail
+        sessions={access.sessions}
+        error={access.error}
+        loading={access.loading}
+        timeZone={timeZone}
+      />
+    </div>
+  );
+}
+
+/**
+ * Where the person was signed in from that day.
+ *
+ * Evidence beside the punches, and never a verdict about them: a machine that
+ * was open all afternoon does not prove anybody was working, and one that was
+ * never opened does not prove they were not. It is here because a punch flagged
+ * for a clock that was minutes out reads very differently once the machine it
+ * came from is visible, and because that judgement is a person's to make.
+ *
+ * There is nothing to press. Deciding still happens on the punch above.
+ */
+function SessionTrail({
+  sessions,
+  error,
+  loading,
+  timeZone,
+}: {
+  readonly sessions: readonly AppSession[];
+  readonly error: string | null;
+  readonly loading: boolean;
+  readonly timeZone: string;
+}): JSX.Element {
+  return (
+    <div className="trail">
+      <h4 className="trail__title">
+        <IconClock />
+        Accesos de ese día
+      </h4>
+
+      {error !== null ? (
+        <p className="review__error">{error}</p>
+      ) : loading ? (
+        <p className="muted">Cargando los accesos…</p>
+      ) : sessions.length === 0 ? (
+        <p className="muted">No se abrió la aplicación ese día.</p>
+      ) : (
+        <ul className="trail__list">
+          {sessions.map((session) => (
+            <li className="trail__row" key={session.id}>
+              <span className="trail__span">
+                {formatTime(session.started_at, timeZone)}
+                {' → '}
+                {session.ended_at === null
+                  ? 'abierta'
+                  : formatTime(session.ended_at, timeZone)}
+              </span>
+              <span className="trail__device">
+                {session.platform ?? 'equipo sin identificar'}
+              </span>
+              {session.ip !== null && session.ip !== '' && (
+                <span className="trail__ip">{session.ip}</span>
+              )}
+              {/* The engine's word, not a guess: `expired` means the machine
+                  stopped reporting and the sweeper closed it at its last
+                  signal, which is not the same as somebody signing out. */}
+              {session.end_reason === 'expired' && (
+                <span className="pill pill--mute">sin cierre</span>
+              )}
+            </li>
           ))}
         </ul>
       )}
