@@ -95,6 +95,13 @@ create unique index if not exists app_sessions_open_unique
   on attendance.app_sessions (auth_user_id, device_id)
   where ended_at is null;
 
+-- The shape `my_sessions()` reads in, and the covering index the foreign key to
+-- auth.users needs. The unique index above leads with the same column but is
+-- partial -- it holds only the open rows -- so it can serve neither a listing of
+-- somebody's history nor the cascade when an account is deleted.
+create index if not exists app_sessions_account_idx
+  on attendance.app_sessions (auth_user_id, started_at desc);
+
 create index if not exists app_sessions_employee_idx
   on attendance.app_sessions (employee_id, started_at desc);
 create index if not exists app_sessions_device_idx
