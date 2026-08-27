@@ -905,8 +905,13 @@ export interface DossierAlert {
    * voided them. The row is kept and shown, but it counts towards nothing and
    * no longer holds the day's slot for its kind. `state` is untouched: what HR
    * decided is still what HR decided.
+   *
+   * **Optional, for the deploy window.** A bundle and a migration are never
+   * atomic, so between the two this key is simply absent -- and `undefined` is
+   * not `null`, which would have made every alert on the page read as without
+   * effect. Read it through `??` and never compare it directly.
    */
-  readonly superseded_at: string | null;
+  readonly superseded_at?: string | null;
 }
 
 /** What somebody decided about this person's record, with the mandatory reason. */

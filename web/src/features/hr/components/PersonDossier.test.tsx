@@ -1,7 +1,12 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EmployeeDossier, EmployeeSummary, TeamMember } from '../../../lib/types';
+import type {
+  DossierAlert,
+  EmployeeDossier,
+  EmployeeSummary,
+  TeamMember,
+} from '../../../lib/types';
 import { PersonDossier } from './PersonDossier';
 
 // `RecordBody` fetches its own summary and access log. Its content is covered by
@@ -289,6 +294,24 @@ describe('PersonDossier', () => {
 
     expect(screen.getByText('Salida temprana')).toBeInTheDocument();
     expect(screen.queryByText('Sin salida')).not.toBeInTheDocument();
+  });
+
+  it('does not mark every alert without effect while a migration is behind the bundle', () => {
+    // The key is simply absent between a deploy and its migration. `undefined`
+    // is not `null`, and a direct comparison made every alert on the page read
+    // as discarded -- the same shape of bug as the counter that once showed NaN.
+    const alert = dossier().alerts[0] as DossierAlert;
+    const withoutTheKey = { ...alert } as Record<string, unknown>;
+    delete withoutTheKey.superseded_at;
+
+    draw({
+      dossier: dossier({
+        alerts: [withoutTheKey as unknown as DossierAlert],
+      }),
+    });
+
+    expect(screen.queryByText('Sin efecto')).not.toBeInTheDocument();
+    expect(screen.getByText('Descartada')).toBeInTheDocument();
   });
 
   it('lists people one per row rather than as a wrapping cloud of chips', () => {

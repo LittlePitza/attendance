@@ -407,10 +407,12 @@ function Devices({ devices }: { readonly devices: readonly DossierDevice[] }): J
 }
 
 function Alerts({ alerts }: { readonly alerts: readonly DossierAlert[] }): JSX.Element {
+  // `?? null` rather than a direct comparison: during a deploy window the key is
+  // absent, and `undefined !== null` would mark every alert without effect.
   const open = alerts.filter(
-    (alert) => alert.state === 'open' && alert.superseded_at === null,
+    (alert) => alert.state === 'open' && (alert.superseded_at ?? null) === null,
   ).length;
-  const voided = alerts.filter((alert) => alert.superseded_at !== null).length;
+  const voided = alerts.filter((alert) => (alert.superseded_at ?? null) !== null).length;
 
   return (
     <div className="dossier__section">
@@ -434,7 +436,9 @@ function Alerts({ alerts }: { readonly alerts: readonly DossierAlert[] }): JSX.E
             {alerts.map((alert) => (
               <li
                 className={
-                  alert.superseded_at === null ? 'dossier__alert' : 'dossier__alert is-void'
+                  (alert.superseded_at ?? null) === null
+                    ? 'dossier__alert'
+                    : 'dossier__alert is-void'
                 }
                 key={alert.id}
               >
@@ -449,7 +453,7 @@ function Alerts({ alerts }: { readonly alerts: readonly DossierAlert[] }): JSX.E
                     {alert.note !== null && alert.note !== '' && ` · ${alert.note}`}
                   </span>
                 </span>
-                {alert.superseded_at !== null ? (
+                {(alert.superseded_at ?? null) !== null ? (
                   <span
                     className="pill pill--mute"
                     title="Se anularon los marcajes que la originaron, así que no cuenta en ninguna cifra."
