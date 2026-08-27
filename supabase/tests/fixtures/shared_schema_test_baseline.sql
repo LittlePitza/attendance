@@ -12,15 +12,30 @@
 -- the help desk maintains here, never from one the client sent. `correo` is
 -- `not null` in production and stays `not null` here, so a fixture cannot make
 -- the address optional in a way production would not allow.
+--
+-- Three of these are here because public.save_employee() and
+-- public.retire_employee() would otherwise pass locally and fail in production:
+--
+--   * `unique (correo)` is what the duplicate-address refusal is written
+--     against. Without it a suite proving somebody cannot take a colleague's
+--     address proves only that this file forgot the constraint.
+--   * `check (estado in ('activo', 'baja'))` is the whole reason "delete" is
+--     spelled baja. A fixture that accepted any string would let a writer
+--     invent a third state nothing else in the system reads.
+--   * `extension` exists so the columns save_employee() deliberately leaves
+--     alone are here to be left alone. There is no `updated_at`: production has
+--     none on this table, and a fixture that grew one would make a writer
+--     touching it look correct.
 create table public.empleados (
   id           uuid        primary key default gen_random_uuid(),
   nombre       text        not null,
-  correo       text        not null,
+  correo       text        not null unique,
   puesto       text,
   departamento text,
-  estado       text        not null default 'activo',
-  created_at   timestamptz not null default now(),
-  updated_at   timestamptz not null default now()
+  extension    text,
+  estado       text        not null default 'activo'
+    check (estado in ('activo', 'baja')),
+  created_at   timestamptz not null default now()
 );
 
 alter table public.empleados enable row level security;

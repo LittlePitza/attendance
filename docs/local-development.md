@@ -67,8 +67,8 @@ npm run db:stop
 | `npm run db:prepare` | Rebuild `.local/supabase`; no Docker or database |
 | `npm run db:start` | Prepare the workspace and start local Postgres |
 | `npm run db:reset` | Prepare and reset only the local database |
-| `npm run db:test` | Prepare and run the four SQL suites against local Postgres |
-| `npm run db:verify` | Prepare, start, reset and run the four SQL suites |
+| `npm run db:test` | Prepare and run the eight SQL suites against local Postgres |
+| `npm run db:verify` | Prepare, start, reset and run the eight SQL suites |
 | `npm run db:stop` | Stop the stack identified as `attendance-local` |
 
 The CLI accepts exactly one action. Extra flags and arguments are rejected, so a

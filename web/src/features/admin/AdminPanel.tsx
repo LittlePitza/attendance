@@ -2,10 +2,12 @@ import { useState, type JSX } from 'react';
 import './admin.css';
 import { AccountsSection } from './components/AccountsSection';
 import { AlertRulesSection } from './components/AlertRulesSection';
+import { PeopleSection } from './components/PeopleSection';
 import { SchedulesSection } from './components/SchedulesSection';
 import { useAdminData } from './useAdminData';
 
 const TABS = [
+  { id: 'people', label: 'Personal' },
   { id: 'accounts', label: 'Accesos' },
   { id: 'schedules', label: 'Horarios' },
   { id: 'rules', label: 'Alertas' },
@@ -16,18 +18,24 @@ type Tab = (typeof TABS)[number]['id'];
 /**
  * The configuration this system used to require the SQL editor for.
  *
- * Three things, and they are three because they are the three tables with rows
- * in them that nobody could reach: who can sign in, the hours everything is
- * measured against, and what raises an alert and who it goes to.
+ * Four things, and they are four because they are the four tables with rows in
+ * them that nobody could reach: who is on the payroll, who can sign in, the
+ * hours everything is measured against, and what raises an alert and who it
+ * goes to.
  *
- * Tabs rather than three sidebar entries. They are read together -- giving
- * somebody access is followed by checking a schedule covers them -- and a nav
- * that grew from four items to seven would bury the board they are all in
- * service of.
+ * Tabs rather than four sidebar entries. They are read together -- adding
+ * somebody is followed by giving them access and checking a schedule covers
+ * them -- and a nav that grew from four items to eight would bury the board they
+ * are all in service of.
+ *
+ * It opens on `Personal`, which is where that sequence starts: the roster is
+ * the list the other three hang off, and it is the only one of them that
+ * answers a question about a person rather than about a setting.
  */
 export function AdminPanel(): JSX.Element {
-  const [tab, setTab] = useState<Tab>('accounts');
-  const { accounts, departments, schedules, rules, error, loading, refresh } = useAdminData();
+  const [tab, setTab] = useState<Tab>('people');
+  const { accounts, employees, departments, schedules, rules, error, loading, refresh } =
+    useAdminData();
 
   const reload = (): void => void refresh();
 
@@ -60,6 +68,10 @@ export function AdminPanel(): JSX.Element {
         <p className="note note--warn" role="status">
           {error}
         </p>
+      )}
+
+      {tab === 'people' && (
+        <PeopleSection employees={employees} departments={departments} onChanged={reload} />
       )}
 
       {tab === 'accounts' && <AccountsSection accounts={accounts} onChanged={reload} />}

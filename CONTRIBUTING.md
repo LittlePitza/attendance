@@ -42,6 +42,49 @@ uses `internal.parse_timestamptz()`, which returns null instead of raising, and
 each event is applied inside its own `begin ... exception` block. Both exist so
 one malformed event is rejected on its own instead of taking the batch with it.
 
+**A punch that was voided stops counting, and the engine knows it.** The
+interval a punch closes is measured against the previous one, and
+`record_punch()` reads *the last punch that still counts* rather than the last
+row that exists -- `internal.punch_is_void()` is the one definition of the
+difference. Without that, a day that was reset would measure its next interval
+from a punch the reset discarded.
+
+That is also why there are two implementations of the same arithmetic.
+`record_punch()` accumulates by difference as each punch arrives, which is right
+for a punch arriving and useless once one is taken away; `internal.recompute_workday()`
+replays the punches that count and derives the day from scratch. They must agree,
+so `workforce_api_test.sql` recomputes an untouched day and asserts nothing moved
+-- on a plain day, and again on one that was reset and punched into afterwards.
+
+## Starting a day over
+
+`public.reset_day()` is the only thing that undoes a day, and it undoes it the
+way this schema allows: **nothing is deleted.** Every punch of the day gets a
+`void_punch` row in `attendance.adjustments`, carrying the hour it stops
+counting and the mandatory reason, and `internal.recompute_workday()` rebuilds
+the day from what is left -- which is nothing, so the day is `not_started` with
+its counters at zero and its opening and closing hours gone.
+
+It voids the whole day rather than offering a punch to pick, and that is the
+safer feature as well as the smaller one: a sequence with a hole in it is not a
+workday. Voiding the middle of `clock_in, break_start, break_end, clock_out`
+leaves a break that ends without beginning, and something would then have to
+decide what the day counted as. `recompute_workday()` refuses to guess -- it
+raises on a sequence that is not a workday -- and voiding all of it leaves
+nothing to interpret.
+
+Two things it deliberately does not do. **It does not close the day's alerts**:
+an alert is a record of what happened, and somebody who was an hour late at
+09:30 still was. **It does not stop the evaluator**, so a day reset after the
+entry window has closed can collect a `missing_entry` within five minutes --
+correctly, because that is what the record now says. Both are reported back in
+the answer, and the screen prints the count, so nobody has to discover it later.
+
+`correct_time` and `add_punch` are still not implemented. Both invent a
+timestamp nobody punched, which deserves its own argument about who may
+fabricate a record and how it is marked; discarding one somebody did is a
+different question, and this is the answer to that one.
+
 ## The alert evaluator
 
 `attendance.evaluate_alerts(p_now)` is the only place that decides an alert
@@ -169,8 +212,21 @@ with in devtools changes what is offered, never what comes back.
 
 **The administration screen** (`web/src/features/admin/`) is the one place in
 the client where somebody types, and it is why `attendance.schedules`,
-`attendance.alert_rules` and `public.user_roles` are no longer edited in the SQL
-editor. It holds no rule either: every field it offers is validated again by the
+`attendance.alert_rules`, `public.user_roles` and now `public.empleados` are no
+longer edited in the SQL editor. Its first tab is the roster, because that is
+where the sequence starts: somebody is added, then given access, then covered by
+a schedule.
+
+**Nothing on it is called deleting, because nothing deletes.** "Dar de baja"
+sets `estado = 'baja'` and unlinks the account. A real `DELETE` has exactly two
+outcomes and neither is wanted: the foreign keys from `punches` and `workdays`
+refuse it for anybody who has ever punched, and for anybody who has not it
+succeeds and takes their alerts, sessions, devices, schedules and consents with
+it through five cascades, silently. The screen says so where the button is.
+
+**The box behind each name works nothing out either.** Hours against expected,
+the week by week, punctuality, the streak and the three ways a disconnection is
+counted all arrive from `public.employee_summary()`. It holds no rule either: every field it offers is validated again by the
 function it calls, and what it prints on a refusal is the database's own Spanish
 sentence rather than a kinder one of its own.
 
@@ -305,7 +361,21 @@ were not. There is nothing to press on it.
 
 ## What the employee's screen may work out
 
-Nothing. `my_summary()` decides hours against expected, punctuality, the streak
+Nothing. And neither does HR's: `my_summary()` and `employee_summary()` are two
+thin wrappers over `internal.attendance_summary()`, which is the same division
+`punch()` and `sync_punches()` have over `record_punch()`. The entry point
+decides *who* -- the token, or a parameter RLS scopes -- and the shared function
+decides *what*. Two copies of a punctuality calculation would drift exactly the
+way two copies of the state machine would, and the drift would be invisible:
+both screens would show a number and only one of them would be right.
+
+It is `SECURITY INVOKER`, and that is load-bearing rather than tidy. An invoker
+function called from an invoker function still runs as the original caller, so
+the policies on `workdays`, `alerts` and `app_sessions` are what decide whose
+figures come back. Made definer, it would answer about anybody to anybody and
+both wrappers would have to reimplement a scope rule that already exists once.
+
+`my_summary()` decides hours against expected, punctuality, the streak
 and the average entry, for the same reason the board never works out who was
 late -- and it counts `late_entry` alerts rather than re-deriving lateness from
 the hour, because the schedule, the grace period and the department threshold
@@ -568,7 +638,7 @@ cd supabase/functions && deno test --filter "recipient"
 ```
 
 **The SQL suites are the exception: there is no way to run one.**
-`npm run db:test` runs all seven, because the wrapper takes a single known
+`npm run db:test` runs all eight, because the wrapper takes a single known
 action and rejects every additional argument -- which is the same property that
 stops a suite being pointed at a different database by accident. Narrow inside
 the file instead.
@@ -576,7 +646,7 @@ the file instead.
 `npm test` verifies the assembler, command allowlist, local-only configuration,
 portable CLI launcher and documentation guardrails. `npm run db:verify` then
 builds `.local/supabase`, starts local Postgres, resets it from all migrations
-and synthetic fixtures, and runs the seven SQL suites.
+and synthetic fixtures, and runs the eight SQL suites.
 
 The wrapper accepts one known action and constructs every Supabase argument
 itself. There is no `--db-url`, link command, project selector or remote fallback.
@@ -593,7 +663,8 @@ boundary for an operating database.
 npm run db:prepare  # assemble the ignored local workspace
 npm run db:start    # start only the local database service
 npm run db:reset    # replay migrations and synthetic seed locally
-npm run db:test     # punch, alert, read, review, admin, sessions and security suites
+npm run db:test     # punch, alert, read, review, admin, sessions,
+                    # workforce and security suites
 npm run db:verify   # start, reset and test in one command
 npm run db:stop     # stop this repository's local stack
 ```
@@ -693,3 +764,14 @@ select tablename, policyname, cmd from pg_policies
   `missing_entry` every day until one exists, and HR dismisses each by hand on
   **Revisión**. Closing it is one extra condition inside `evaluate_alerts()`, not
   a second evaluator.
+- **`anon` still holds INSERT, UPDATE, DELETE and TRUNCATE on 21 `public`
+  tables**, `empleados` among them. Nothing exploits it today because no RLS
+  policy grants the anonymous role anything -- but RLS is the only thing
+  stopping it, and `TRUNCATE` does not go through RLS at all. Revoking those
+  grants is its own migration with its own blast radius over `ti-hub`, so it is
+  a separate change rather than a line appended to one about the roster.
+- **`correct_time` and `add_punch` are still not implemented.** `reset_day()`
+  closed the third of the three adjustment kinds the review API deferred. The
+  other two invent a timestamp nobody punched, which is a different argument --
+  about who may fabricate a record and how it is marked -- and it has not been
+  had yet.

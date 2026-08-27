@@ -84,6 +84,11 @@ begin
   -- Writes elevate; reads do not. The published surface is small enough to name
   -- in full, so the invariant is enforced rather than remembered: adding a
   -- SECURITY DEFINER read function fails here until somebody writes down why.
+  --
+  -- `list_accounts` is deliberately absent from both lists. It is the one read
+  -- that elevates, because the answer lives in `auth.users` and
+  -- `public.user_roles`, which no ordinary caller can reach -- and rule 9 asks
+  -- for that reason in writing, which its migration gives.
   select count(*)
     into violation_count
     from pg_catalog.pg_proc p
@@ -91,10 +96,20 @@ begin
    where n.nspname = 'public'
      and (
           (p.proname in ('my_profile', 'server_time', 'my_day', 'my_history',
-                         'team_day', 'open_alerts', 'employee_day')
+                         'my_summary', 'my_sessions',
+                         'team_day', 'open_alerts', 'employee_day',
+                         'employee_sessions', 'employee_summary',
+                         'list_departments', 'list_schedules', 'list_alert_rules',
+                         'list_employees')
            and p.prosecdef)
        or (p.proname in ('punch', 'sync_punches', 'heartbeat',
-                         'review_punch', 'decide_alert')
+                         'review_punch', 'decide_alert',
+                         'open_session', 'touch_session', 'close_session',
+                         'save_schedule', 'retire_schedule', 'save_alert_rule',
+                         'link_employee_account', 'set_account_role',
+                         'unlink_employee_account', 'record_password_reset',
+                         'reset_day', 'save_employee',
+                         'retire_employee', 'restore_employee')
            and not p.prosecdef)
      );
 

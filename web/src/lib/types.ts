@@ -413,6 +413,89 @@ export interface ProvisionResult {
   readonly locked_out?: boolean;
 }
 
+/* --------------------------------------------------------------- The roster ---
+ * `list_employees()` answers who is on the payroll; `list_accounts()` answers
+ * who can sign in. They are not two versions of one list: this one includes
+ * somebody who has left, because their days are still in the record and the box
+ * that shows them has to be reachable.
+ */
+
+/** The two states `empleados_estado_check` allows. There is no third, and no delete. */
+export const EMPLOYEE_STATES = ['activo', 'baja'] as const;
+export type EmployeeState = (typeof EMPLOYEE_STATES)[number];
+
+export interface EmployeeRow {
+  readonly employee_id: string;
+  readonly employee_name: string;
+  readonly employee_email: string;
+  readonly job_title: string | null;
+  readonly department_id: string | null;
+  readonly department: string | null;
+  readonly state: EmployeeState;
+  readonly has_account: boolean;
+  readonly created_at: string;
+}
+
+/**
+ * What `save_employee()` is given. `id` present means edit, absent means create.
+ *
+ * The optional fields spell out `| undefined` for the reason `ScheduleDraft`
+ * does: `exactOptionalPropertyTypes` makes an assigned `undefined` a different
+ * thing from an absent key, and a form that clears a department assigns one.
+ *
+ * There is no `state` here, and that is the point: moving somebody between
+ * activo and baja takes a reason, so it belongs to `retireEmployee` and
+ * `restoreEmployee` and not to a form field.
+ */
+export interface EmployeeDraft {
+  readonly id?: string | undefined;
+  readonly name: string;
+  readonly email: string;
+  readonly jobTitle?: string | undefined;
+  readonly departmentId?: string | undefined;
+}
+
+export interface SavedEmployee {
+  readonly employee_id: string;
+  readonly employee_name: string;
+  readonly created: boolean;
+}
+
+/**
+ * What retiring or restoring somebody answers with.
+ *
+ * `access_revoked` says their account was unlinked along with it; `open_alerts`
+ * is what is left on Revisión for HR, because retiring somebody closes nothing.
+ * `needs_account` comes back from a restore and is true whenever coming back
+ * did not give them a way in -- which is always, on purpose.
+ */
+export interface EmployeeStateResult {
+  readonly employee_id: string;
+  readonly employee_name: string;
+  readonly state: EmployeeState;
+  readonly access_revoked?: boolean;
+  readonly open_alerts?: number;
+  readonly needs_account?: boolean;
+}
+
+/**
+ * What `reset_day()` answers with.
+ *
+ * `punches_voided` is how many stopped counting -- nothing was deleted -- and
+ * `open_alerts` is the day's alerts, which a reset deliberately leaves alone.
+ */
+export interface ResetDayResult {
+  readonly employee_id: string;
+  readonly employee_name: string;
+  readonly workday_id: string;
+  readonly date: string;
+  readonly punches_voided: number;
+  readonly state: WorkdayState;
+  readonly worked_seconds: number;
+  readonly break_seconds: number;
+  readonly open_alerts: number;
+}
+
 /* --------------------------------------------------------- The access log ---
  * One row per stretch of the application being open on one device. The three
  * writers are `SECURITY DEFINER` and derive the account from the token, like
@@ -495,11 +578,42 @@ export interface SummaryDay {
   readonly entry_expected: string | null;
   readonly opened_at: string | null;
   readonly closed_at: string | null;
+  /** Some punch of that day arrived by sync, so the device was offline for part of it. */
+  readonly has_offline: boolean;
   /** Carries a `late_entry` alert the evaluator raised and HR did not dismiss. */
   readonly late: boolean;
 }
 
-export interface MySummary {
+/**
+ * One ISO week of the range, grouped by Postgres rather than by the browser.
+ *
+ * "Days worked this week" has a wrong answer available -- a week that starts on
+ * Sunday, or one bounded by the reader's zone instead of the employee's -- so
+ * `date_trunc('week', ...)` decides it where the zone is known. The first and
+ * last week of a range are partial by construction.
+ */
+export interface SummaryWeek {
+  readonly week_start: string;
+  readonly days_scheduled: number;
+  readonly days_worked: number;
+  readonly days_complete: number;
+  readonly worked_seconds: number;
+  readonly break_seconds: number;
+  readonly expected_seconds: number;
+  readonly late_days: number;
+}
+
+/**
+ * What `internal.attendance_summary()` answers, whichever wrapper asked it.
+ *
+ * `my_summary()` asks about the caller and `employee_summary()` asks about
+ * somebody else; the figures are the same figures, decided once. The three
+ * disconnection counts are counts of facts rather than judgements:
+ * `no_connection_alerts` is what the evaluator raised and HR did not dismiss,
+ * `offline_days` is days some punch arrived by sync, and `expired_sessions` is
+ * sessions that stopped reporting and were closed by the sweeper.
+ */
+export interface AttendanceSummary {
   readonly server_time: string;
   readonly time_zone: string;
   readonly from: string;
@@ -518,5 +632,18 @@ export interface MySummary {
   readonly punctuality_pct: number | null;
   readonly average_entry: string | null;
   readonly streak_days: number;
+  readonly offline_days: number;
+  readonly no_connection_alerts: number;
+  readonly expired_sessions: number;
+  readonly weeks: readonly SummaryWeek[];
   readonly series: readonly SummaryDay[];
+}
+
+export type MySummary = AttendanceSummary;
+
+/** The same answer about somebody else. Includes people on baja: their days are still in the record. */
+export interface EmployeeSummary extends AttendanceSummary {
+  readonly employee_id: string;
+  readonly employee_name: string;
+  readonly employee_state: EmployeeState;
 }

@@ -13,6 +13,10 @@ import type {
   DepartmentRow,
   DeviceDescription,
   EmployeeDay,
+  EmployeeDraft,
+  EmployeeRow,
+  EmployeeStateResult,
+  EmployeeSummary,
   HeartbeatResult,
   MyDay,
   MySummary,
@@ -24,7 +28,9 @@ import type {
   PunchDecision,
   PunchKind,
   PunchResult,
+  ResetDayResult,
   ReviewResult,
+  SavedEmployee,
   SaveResult,
   ScheduleDraft,
   ScheduleRow,
@@ -334,6 +340,70 @@ export const api = {
       action: 'revoke',
       employee_id: employeeId,
       reason,
+    }),
+
+  /* ----------------------------------------------------------- The roster --- */
+
+  /** Everybody on the payroll, people on baja included. HR and admin only. */
+  listEmployees: (): Promise<EmployeeRow[]> => rpc<EmployeeRow[]>('list_employees'),
+
+  /**
+   * Creates or edits a person in the shared roster. `id` present means edit.
+   *
+   * It never sends `estado`: moving somebody between activo and baja takes a
+   * reason, and the two functions that take one are below.
+   */
+  saveEmployee: (draft: EmployeeDraft): Promise<SavedEmployee> =>
+    rpc<SavedEmployee>('save_employee', {
+      p_name: draft.name,
+      p_email: draft.email,
+      p_job_title: draft.jobTitle ?? null,
+      p_department_id: draft.departmentId ?? null,
+      ...(draft.id === undefined ? {} : { p_id: draft.id }),
+    }),
+
+  /**
+   * What "delete" means here. The row survives and so does everything that
+   * points at it; the person goes to baja and their access is unlinked with
+   * them. A real DELETE is refused by the database for anybody who has ever
+   * punched, and would silently take five tables with it for anybody who has
+   * not.
+   */
+  retireEmployee: (employeeId: string, reason: string): Promise<EmployeeStateResult> =>
+    rpc<EmployeeStateResult>('retire_employee', {
+      p_employee_id: employeeId,
+      p_reason: reason,
+    }),
+
+  /** Back to activo. Not back to having an account: that is a separate decision. */
+  restoreEmployee: (employeeId: string, reason: string): Promise<EmployeeStateResult> =>
+    rpc<EmployeeStateResult>('restore_employee', {
+      p_employee_id: employeeId,
+      p_reason: reason,
+    }),
+
+  /**
+   * Starts one person's day over. Every punch of it stops counting -- none is
+   * deleted -- and the counters are rebuilt from what is left, which is
+   * nothing. The day's alerts are deliberately untouched, and the answer says
+   * how many are still open.
+   */
+  resetDay: (employeeId: string, reason: string, date?: string): Promise<ResetDayResult> =>
+    rpc<ResetDayResult>('reset_day', {
+      p_employee_id: employeeId,
+      p_reason: reason,
+      ...(date === undefined ? {} : { p_date: date }),
+    }),
+
+  /**
+   * Everything the database has worked out about one person: hours against
+   * expected, the week by week, punctuality, the streak and the disconnections.
+   * The same figures `mySummary` returns, decided in the same function.
+   */
+  employeeSummary: (employeeId: string, days?: number): Promise<EmployeeSummary> =>
+    rpc<EmployeeSummary>('employee_summary', {
+      p_employee_id: employeeId,
+      ...(days === undefined ? {} : { p_days: days }),
     }),
 
   /**

@@ -1,4 +1,4 @@
-import type { AlertKind, AssignableRole, ScheduleScope } from '../../lib/types';
+import type { AlertKind, AssignableRole, EmployeeState, ScheduleScope } from '../../lib/types';
 
 /**
  * The words the administration screen uses.
@@ -99,4 +99,57 @@ export function describeLastSignIn(isoTimestamp: string | null): string {
     return 'Entró ayer';
   }
   return `Entró hace ${String(days)} días`;
+}
+
+/**
+ * The two states `empleados_estado_check` allows, in the words the screen uses.
+ *
+ * "Dado de baja" rather than "eliminado", because that is what happens: the row
+ * stays, the punches stay, and the person stops being able to sign in. Calling
+ * it deletion on screen would promise something the database refuses to do.
+ */
+export const EMPLOYEE_STATE_LABELS: Readonly<Record<EmployeeState, string>> = {
+  activo: 'Activo',
+  baja: 'Dado de baja',
+};
+
+/** `24 ago 2026`. Accepts a date or a timestamp: only the day is ever shown. */
+export function formatDay(iso: string): string {
+  // Pinned to midday UTC and read back in UTC, the same trick the board's date
+  // labels use: a plain date is not an instant, and letting the browser's zone
+  // touch it shifts it to the day before for anybody west of Greenwich.
+  const at = new Date(`${iso.slice(0, 10)}T12:00:00Z`);
+
+  if (Number.isNaN(at.getTime())) {
+    return '—';
+  }
+
+  return new Intl.DateTimeFormat('es-MX', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(at);
+}
+
+/**
+ * `Semana del 24 ago`. The week starts on a Monday because Postgres grouped it
+ * that way, in the employee's zone -- not because this file decided so.
+ *
+ * Formatted rather than trimmed out of `formatDay`: how a locale spells a date
+ * is the locale's business, and a regular expression that strips the year from
+ * one spelling mangles the next.
+ */
+export function describeWeekStart(isoDate: string): string {
+  const at = new Date(`${isoDate.slice(0, 10)}T12:00:00Z`);
+
+  if (Number.isNaN(at.getTime())) {
+    return 'Semana';
+  }
+
+  return `Semana del ${new Intl.DateTimeFormat('es-MX', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  }).format(at)}`;
 }
