@@ -40,7 +40,7 @@ test('prepareWorkspace creates an isolated local Supabase project', async (t) =>
   assert.ok(migrations.includes('20260826201929_attendance_review_api.sql'));
   assert.ok(migrations.includes('20260826202237_attendance_admin_api.sql'));
   assert.ok(migrations.includes('20260827144253_attendance_sessions_and_stats.sql'));
-  assert.ok(migrations.includes('20260827153301_attendance_workforce_api.sql'));
+  assert.ok(migrations.includes('20260827162327_attendance_workforce_api.sql'));
   assert.equal(
     await readFile(path.join(generatedSupabase, 'seed.sql'), 'utf8'),
     await readFile(path.join(repositoryRoot, 'supabase/tests/fixtures/local_seed.sql'), 'utf8'),
