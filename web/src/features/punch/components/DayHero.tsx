@@ -14,7 +14,7 @@ import {
   formatWallClock,
   greeting,
 } from '../labels';
-import { liveCounters } from '../live';
+import { liveCounters, runningCounter } from '../live';
 import { ProgressRing } from './ProgressRing';
 
 /**
@@ -51,7 +51,12 @@ export function DayHero({
   const { worked, paused, progress } = liveCounters(day, fetchedAt, now);
 
   const tone = RING_TONES[day.state];
-  const running = day.counting !== null;
+  // `runningCounter` and not `day.counting !== null`: an absent field is
+  // `undefined`, which is not null, so the plain comparison reports a finished
+  // day as running and shows it a ticking second on a figure that will never
+  // change again. One helper answers it for both this and the counters above.
+  const running = runningCounter(day) !== null;
+  const expected = day.expected_seconds ?? null;
 
   return (
     <section className="hero" aria-live="polite">
@@ -85,9 +90,7 @@ export function DayHero({
             {running ? formatStopwatch(worked) : formatClock(worked)}
           </span>
           <span className="ring__of">
-            {day.expected_seconds === null
-              ? 'sin horario hoy'
-              : `de ${formatClock(day.expected_seconds)} h`}
+            {expected === null ? 'sin horario hoy' : `de ${formatClock(expected)} h`}
           </span>
         </ProgressRing>
 
@@ -168,10 +171,12 @@ const ACTION_ICONS: Readonly<Record<PunchKind, JSX.Element>> = {
 
 /** What a screen reader is told the ring means, since it cannot see it fill. */
 function ringLabel(day: MyDay, worked: number): string {
-  const so_far = `Llevas ${formatClock(worked)} horas trabajadas`;
-  return day.expected_seconds === null
-    ? `${so_far}. Hoy no tienes horario asignado.`
-    : `${so_far} de ${formatClock(day.expected_seconds)} esperadas.`;
+  const soFar = `Llevas ${formatClock(worked)} horas trabajadas`;
+  const expected = day.expected_seconds ?? null;
+
+  return expected === null
+    ? `${soFar}. Hoy no tienes horario asignado.`
+    : `${soFar} de ${formatClock(expected)} esperadas.`;
 }
 
 /**

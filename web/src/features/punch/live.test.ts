@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MyDay, MySummary, SummaryDay } from '../../lib/types';
-import { chartCeiling, liveCounters, recentDays, weekToDate } from './live';
+import { chartCeiling, liveCounters, recentDays, runningCounter, weekToDate } from './live';
 
 const FETCHED_AT = 1_787_670_000_000;
 
@@ -80,6 +80,47 @@ describe('liveCounters', () => {
     const counters = liveCounters(day(), skewed, skewed + 120_000);
 
     expect(counters.worked).toBe(3600 + 120);
+  });
+
+  it('falls back to the settled counters when the database predates the fields', () => {
+    // The window between a merged deploy and its migration. `my_day()` still
+    // answers, without the five fields this screen was built around. Read as
+    // present they arrive `undefined`, and `undefined + 0` is `NaN` -- on the
+    // largest figure on the screen, in front of somebody about to clock in.
+    const older = {
+      server_time: '2026-08-24T15:00:00Z',
+      employee_id: '30000000-0000-4000-8000-000000000001',
+      date: '2026-08-24',
+      time_zone: 'America/Mexico_City',
+      state: 'working',
+      next_actions: ['break_start', 'clock_out'],
+      worked_seconds: 3600,
+      break_seconds: 600,
+      opened_at: '2026-08-24T14:00:00Z',
+      closed_at: null,
+      last_heartbeat: null,
+      has_offline: false,
+      needs_review: false,
+      schedule: null,
+      punches: [],
+    } satisfies MyDay;
+
+    const counters = liveCounters(older, FETCHED_AT, FETCHED_AT + 90_000);
+
+    // Exactly the old behaviour: the counter holds still between punches. Wrong,
+    // and readable, which is the trade worth making for the minutes it lasts.
+    expect(counters.worked).toBe(3600);
+    expect(counters.paused).toBe(600);
+    expect(counters.progress).toBeNull();
+    expect(Number.isNaN(counters.worked)).toBe(false);
+  });
+
+  it('reports nothing running when the field is absent, not something', () => {
+    // `day.counting !== null` is true for `undefined`, which would show a
+    // finished day a ticking second on a number that can never change again.
+    const { counting, ...withoutCounting } = day();
+    expect(runningCounter(withoutCounting)).toBeNull();
+    expect(runningCounter(day({ counting: 'break' }))).toBe('break');
   });
 
   it('reports no progress on a day with no schedule', () => {
