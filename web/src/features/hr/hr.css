@@ -420,6 +420,24 @@
   padding: 0;
 }
 
+/* A toggle that is on, inside a horizontal toolbar.
+ *
+ * Not `btn--solid`: that one carries `width: 100%` and a taller `min-height`
+ * for form submits, so borrowing it would make the control grow and shove its
+ * neighbours onto another line at the moment it is pressed. This changes
+ * colour and weight only, so nothing moves under the cursor. */
+.btn--on {
+  border-color: var(--solid);
+  background: var(--solid);
+  color: var(--solid-ink);
+  font-weight: 550;
+}
+
+.btn--on:hover:not(:disabled) {
+  background: #2a2a2d;
+  border-color: #2a2a2d;
+}
+
 .btn:focus-visible,
 .side__link:focus-visible,
 .field:focus-visible,
@@ -768,6 +786,36 @@ button.stat:hover {
   background: var(--sunken);
 }
 
+/* The name is the control that opens the record, so it carries the affordance
+ * rather than a separate icon button crowding a row that is already four
+ * columns wide. It is a real button: a plain `text-align` reset keeps it
+ * looking like the identity block it replaced. */
+.row__select {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0.5rem;
+  /* Fill the grid column so the whole identity block is the target, not just
+   * the text inside it. */
+  width: 100%;
+}
+
+.row__select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.row--on {
+  background: var(--sunken);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
 .row__who {
   display: flex;
   align-items: center;
@@ -804,7 +852,10 @@ button.stat:hover {
 
 .row__dept {
   display: block;
-  color: var(--ink-faint);
+  /* Not `--ink-faint`: this sits inside the button now, so it is part of a
+   * control's visible label and has to clear 4.5:1 rather than merely look
+   * secondary. */
+  color: var(--ink-soft);
   font-size: 0.75rem;
   overflow: hidden;
   text-overflow: ellipsis;

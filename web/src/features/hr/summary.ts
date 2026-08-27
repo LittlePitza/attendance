@@ -1,4 +1,4 @@
-import type { AlertSeverity, OpenAlert, TeamMember, WorkdayState } from '../../lib/types';
+import type { AlertKind, AlertSeverity, OpenAlert, TeamMember, WorkdayState } from '../../lib/types';
 import { WORKDAY_STATES } from '../../lib/types';
 
 /**
@@ -125,6 +125,8 @@ export interface BoardFilter {
   readonly query: string;
   readonly state: WorkdayState | 'all';
   readonly department: string | 'all';
+  /** Home Office is a recorded fact: the person clocked in on the shown day. */
+  readonly homeOfficeOnly: boolean;
 }
 
 export function filterTeam(
@@ -134,6 +136,9 @@ export function filterTeam(
   const needle = filter.query.trim().toLowerCase();
 
   return team.filter((member) => {
+    if (filter.homeOfficeOnly && member.opened_at === null) {
+      return false;
+    }
     if (filter.state !== 'all' && member.state !== filter.state) {
       return false;
     }
@@ -199,14 +204,43 @@ export function cumulativeArrivals(buckets: readonly HourBucket[]): ArrivalPoint
 }
 
 /**
+ * The alert kinds Home Office can actually be judged on.
+ *
+ * Not everybody punches every day -- some days are worked from the office, and
+ * this tool only ever sees the Home Office ones. That makes an *absence* prove
+ * nothing: `missing_entry`, `missing_exit` and `break_exceeded` all describe a
+ * day that may simply have been worked somewhere this system cannot see.
+ *
+ * Two kinds survive that reasoning, and for opposite reasons:
+ *
+ *   * `late_entry` -- the person was here and the clock says when. That is a
+ *     recorded fact about a Home Office day, not an inference from silence.
+ *   * `clock_tampered` -- the evaluator raises it at fifteen minutes of skew,
+ *     "where it stops looking like drift". It is the one alert in the set that
+ *     somebody had to cause on purpose, it is `high` severity in the database,
+ *     and this board is its only surface. Filing it away with the absences
+ *     would hide the single thing here nobody should be able to hide.
+ */
+export const COUNTABLE_ALERT_KINDS: readonly AlertKind[] = ['late_entry', 'clock_tampered'];
+
+export function countable(alerts: readonly OpenAlert[]): OpenAlert[] {
+  return alerts.filter((alert) => COUNTABLE_ALERT_KINDS.includes(alert.kind));
+}
+
+/**
  * The same search box narrows the alert list too. Only the name is matched:
  * the kind already has its own filter in the sidebar, and matching the detail
  * sentence would make "min" pull up half the list.
  */
-export function filterAlerts(alerts: readonly OpenAlert[], query: string): OpenAlert[] {
+export function filterAlerts(
+  alerts: readonly OpenAlert[],
+  query: string,
+  countableOnly = false,
+): OpenAlert[] {
   const needle = query.trim().toLowerCase();
+  const scoped = countableOnly ? countable(alerts) : [...alerts];
   if (needle === '') {
-    return [...alerts];
+    return scoped;
   }
-  return alerts.filter((alert) => alert.employee_name.toLowerCase().includes(needle));
+  return scoped.filter((alert) => alert.employee_name.toLowerCase().includes(needle));
 }

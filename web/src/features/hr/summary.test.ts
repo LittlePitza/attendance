@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { OpenAlert, TeamMember, WorkdayState } from '../../lib/types';
 import {
   countBySeverity,
+  countable,
   cumulativeArrivals,
   departmentsOf,
   employeesWithAlerts,
@@ -136,7 +137,26 @@ describe('filterTeam', () => {
     member({ employee_id: '3', employee_name: 'Carla Sosa', department: null }),
   ];
 
-  const all = { query: '', state: 'all', department: 'all' } as const;
+  const all = { query: '', state: 'all', department: 'all', homeOfficeOnly: false } as const;
+
+  it('keeps only people who registered an entry when the Home Office filter is on', () => {
+    const homeOfficeTeam = [
+      member({ employee_id: '1', opened_at: '2026-08-24T15:00:00Z' }),
+      member({ employee_id: '2', opened_at: null, state: 'not_started' }),
+      member({
+        employee_id: '3',
+        opened_at: '2026-08-24T14:50:00Z',
+        closed_at: '2026-08-24T23:00:00Z',
+        state: 'finished',
+      }),
+    ];
+
+    expect(
+      filterTeam(homeOfficeTeam, { ...all, homeOfficeOnly: true }).map(
+        (candidate) => candidate.employee_id,
+      ),
+    ).toEqual(['1', '3']);
+  });
 
   it('matches a name regardless of case or surrounding spaces', () => {
     expect(filterTeam(team, { ...all, query: '  beto ' }).map((m) => m.employee_id)).toEqual(['2']);
@@ -148,10 +168,22 @@ describe('filterTeam', () => {
 
   it('combines the filters instead of replacing one with another', () => {
     const state: WorkdayState = 'working';
-    expect(filterTeam(team, { query: 'a', state, department: 'Sistemas' })).toHaveLength(1);
-    expect(filterTeam(team, { query: 'a', state: 'on_break', department: 'Sistemas' })).toHaveLength(
-      0,
-    );
+    expect(
+      filterTeam(team, {
+        query: 'a',
+        state,
+        department: 'Sistemas',
+        homeOfficeOnly: false,
+      }),
+    ).toHaveLength(1);
+    expect(
+      filterTeam(team, {
+        query: 'a',
+        state: 'on_break',
+        department: 'Sistemas',
+        homeOfficeOnly: false,
+      }),
+    ).toHaveLength(0);
   });
 
   it('does not lose somebody who has no department when filtering by name', () => {
@@ -208,6 +240,21 @@ describe('alert counting', () => {
         alert({ id: '3', employee_id: 'e2' }),
       ]),
     ).toBe(2);
+  });
+
+  it('never buries a tampered clock, which is evidence rather than an absence', () => {
+    const raised = [
+      alert({ id: '1', kind: 'late_entry' }),
+      alert({ id: '2', kind: 'missing_entry' }),
+      alert({ id: '3', kind: 'clock_tampered' }),
+      alert({ id: '4', kind: 'break_exceeded' }),
+      alert({ id: '5', kind: 'missing_exit' }),
+    ];
+
+    // A day nobody punched proves nothing when working from the office is an
+    // option. A clock running a quarter of an hour off is not an absence at
+    // all: it is the one thing here somebody had to do on purpose.
+    expect(countable(raised).map((entry) => entry.id)).toEqual(['1', '3']);
   });
 });
 

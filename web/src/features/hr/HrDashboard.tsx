@@ -21,6 +21,7 @@ import {
 import { Sidebar, type BoardView } from './components/Sidebar';
 import { StatCard } from './components/StatCard';
 import { TeamBoard } from './components/TeamBoard';
+import { TEAM_RECORD_ID, TeamMemberRecord } from './components/TeamMemberRecord';
 import './hr.css';
 import { formatClock, formatLongDate, plural } from './labels';
 import {
@@ -28,6 +29,7 @@ import {
   cumulativeArrivals,
   departmentsOf,
   employeesWithAlerts,
+  countable,
   entryHistogram,
   filterAlerts,
   filterTeam,
@@ -74,6 +76,9 @@ export function HrDashboard({
   const [query, setQuery] = useState('');
   const [state, setState] = useState<WorkdayState | 'all'>('all');
   const [department, setDepartment] = useState<string>('all');
+  const [homeOfficeOnly, setHomeOfficeOnly] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [countableOnly, setCountableOnly] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [reviewing, setReviewing] = useState<string | null>(null);
 
@@ -97,7 +102,6 @@ export function HrDashboard({
 
   const summary = useMemo(() => summarise(team), [team]);
   const departments = useMemo(() => departmentsOf(team), [team]);
-  const severities = useMemo(() => countBySeverity(alerts.alerts), [alerts.alerts]);
 
   const arrivals = useMemo(
     () => cumulativeArrivals(entryHistogram(team, timeZone)),
@@ -105,19 +109,85 @@ export function HrDashboard({
   );
 
   const visible = useMemo(
-    () => filterTeam(team, { query, state, department }),
-    [team, query, state, department],
+    () => filterTeam(team, { query, state, department, homeOfficeOnly }),
+    [team, query, state, department, homeOfficeOnly],
   );
 
-  const visibleAlerts = useMemo(() => filterAlerts(alerts.alerts, query), [alerts.alerts, query]);
+  /**
+   * What this tool can actually judge is what it counts.
+   *
+   * The rest are not discarded -- `hiddenAlerts` says how many stepped aside
+   * and the toggle brings them back -- because an alert that vanishes with no
+   * trace is the way an alert gets lost.
+   */
+  const countedAlerts = useMemo(() => countable(alerts.alerts), [alerts.alerts]);
+
+  const visibleAlerts = useMemo(
+    () => filterAlerts(alerts.alerts, query, countableOnly),
+    [alerts.alerts, query, countableOnly],
+  );
+
+  const hiddenAlerts = alerts.alerts.length - countedAlerts.length;
+
+  /**
+   * The alerts the panel is describing right now.
+   *
+   * The toggle can widen the list to every kind, and a heading still counting
+   * only the countable ones would be the summary disagreeing with the rows
+   * underneath it.
+   */
+  const shownAlerts = countableOnly ? countedAlerts : alerts.alerts;
+
+  const severities = useMemo(() => countBySeverity(shownAlerts), [shownAlerts]);
+
+  /**
+   * The day's counter answers for the day, not for the alert view's toggle.
+   *
+   * Its figure, its caption and its pill all read `countedAlerts`, so the card
+   * can never show a count of one beside a pill claiming a severity that count
+   * does not include.
+   */
+  const countedSeverities = useMemo(() => countBySeverity(countedAlerts), [countedAlerts]);
+
+  /**
+   * The selected person, resolved against the board rather than remembered.
+   *
+   * A filter or a change of day can take the row away, and a record left open
+   * for somebody who is no longer listed would be describing a person the
+   * reader can no longer see.
+   */
+  const selected = useMemo(
+    () => visible.find((member) => member.employee_id === selectedId) ?? null,
+    [visible, selectedId],
+  );
+
+  const toggleSelected = useCallback((employeeId: string): void => {
+    setSelectedId((current) => (current === employeeId ? null : employeeId));
+  }, []);
+
+  /**
+   * Close the record and put focus back where it came from.
+   *
+   * Without this the row's button unmounts nothing but the panel does, and a
+   * keyboard user is left on `document.body` with no place in the board.
+   */
+  const closeRecord = useCallback((): void => {
+    const opener = selectedId;
+    setSelectedId(null);
+    if (opener !== null) {
+      window.requestAnimationFrame(() => {
+        document.querySelector<HTMLButtonElement>(`[data-employee="${opener}"]`)?.focus();
+      });
+    }
+  }, [selectedId]);
 
   const alertsByEmployee = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const alert of alerts.alerts) {
+    for (const alert of countedAlerts) {
       counts.set(alert.employee_id, (counts.get(alert.employee_id) ?? 0) + 1);
     }
     return counts;
-  }, [alerts.alerts]);
+  }, [countedAlerts]);
 
   const step = useCallback((days: number): void => setDate(shiftDate(shownDate, days)), [shownDate]);
 
@@ -145,6 +215,7 @@ export function HrDashboard({
   const clearFilters = useCallback((): void => {
     setState('all');
     setDepartment('all');
+    setHomeOfficeOnly(false);
     setQuery('');
   }, []);
 
@@ -166,7 +237,8 @@ export function HrDashboard({
     return <BoardSkeleton />;
   }
 
-  const filtering = state !== 'all' || department !== 'all' || query !== '';
+  const filtering =
+    state !== 'all' || department !== 'all' || homeOfficeOnly || query !== '';
   // The configuration screen is not a view of a day, so the day's counters and
   // its toolbar have nothing to say about it.
   const configuring = view === 'admin';
@@ -176,7 +248,7 @@ export function HrDashboard({
       <Sidebar
         view={view}
         onView={setView}
-        alertCount={alerts.alerts.length}
+        alertCount={countedAlerts.length}
         reviewCount={summary.needsReview}
         canAdminister={CONFIGURING_ROLES.includes(profile.role)}
         profile={profile}
@@ -310,15 +382,20 @@ export function HrDashboard({
             <StatCard
               index={4}
               label="Alertas"
-              value={alerts.alerts.length}
+              value={countedAlerts.length}
               caption={
-                alerts.alerts.length === 0
+                countedAlerts.length === 0
                   ? 'Nada pendiente'
-                  : plural(employeesWithAlerts(alerts.alerts), 'persona', 'personas')
+                  : plural(employeesWithAlerts(countedAlerts), 'persona', 'personas')
               }
               icon={<IconAlert />}
-              {...(severities.high > 0
-                ? { pill: { text: `${String(severities.high)} altas`, tone: 'bad' as const } }
+              {...(countedSeverities.high > 0
+                ? {
+                    pill: {
+                      text: plural(countedSeverities.high, 'alta', 'altas'),
+                      tone: 'bad' as const,
+                    },
+                  }
                 : {})}
               selected={view === 'alerts'}
               onSelect={() => setView(view === 'alerts' ? 'team' : 'alerts')}
@@ -367,6 +444,14 @@ export function HrDashboard({
                   </div>
 
                   <div className="panel__tools">
+                    <button
+                      className={homeOfficeOnly ? 'btn btn--on' : 'btn'}
+                      type="button"
+                      aria-pressed={homeOfficeOnly}
+                      onClick={() => setHomeOfficeOnly((active) => !active)}
+                    >
+                      Solo Home Office
+                    </button>
                     <label>
                       <span className="sr-only">Filtrar por departamento</span>
                       <select
@@ -390,8 +475,26 @@ export function HrDashboard({
                   </div>
                 </div>
 
-                <TeamBoard team={visible} timeZone={timeZone} alertsByEmployee={alertsByEmployee} />
+                <TeamBoard
+                  team={visible}
+                  timeZone={timeZone}
+                  alertsByEmployee={alertsByEmployee}
+                  selectedId={selected === null ? null : selected.employee_id}
+                  onSelect={toggleSelected}
+                  recordId={TEAM_RECORD_ID}
+                />
               </section>
+
+              {selected !== null && (
+                /* Keyed by employee: without it React reuses the instance and
+                 * the new name renders over the previous person's figures until
+                 * the read lands -- a box that looks right and is not. */
+                <TeamMemberRecord
+                  key={selected.employee_id}
+                  member={selected}
+                  onClose={closeRecord}
+                />
+              )}
             </>
           ) : view === 'alerts' ? (
             <section className="panel">
@@ -399,7 +502,7 @@ export function HrDashboard({
                 <div>
                   <h2 className="panel__title">Alertas abiertas</h2>
                   <p className="panel__subtitle">
-                    {alerts.alerts.length === 0
+                    {shownAlerts.length === 0
                       ? 'Nada que revisar.'
                       : `${plural(severities.high, 'alta', 'altas')} · ${plural(
                           severities.medium,
@@ -408,14 +511,40 @@ export function HrDashboard({
                         )} · ${plural(severities.low, 'baja', 'bajas')}`}
                   </p>
                 </div>
-                {query !== '' && (
-                  <div className="panel__tools">
+                <div className="panel__tools">
+                  {(hiddenAlerts > 0 || !countableOnly) && (
+                    <button
+                      className={countableOnly ? 'btn btn--on' : 'btn'}
+                      type="button"
+                      /* Stable label, moving state. A caption that flipped
+                        * alongside `aria-pressed` would announce the next
+                        * action and the current state at once, contradicting
+                        * itself. */
+                      aria-pressed={countableOnly}
+                      onClick={() => setCountableOnly((only) => !only)}
+                    >
+                      Solo las que cuentan
+                    </button>
+                  )}
+                  {query !== '' && (
                     <button className="btn" type="button" onClick={clearFilters}>
                       Limpiar
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
+
+              {/* The live region is always in the tree and only its text
+                * changes. Mounting it together with its message is one of the
+                * two reliable ways to make a status announcement never fire. */}
+              <p className="note" role="status" aria-live="polite">
+                {countableOnly && hiddenAlerts > 0
+                  ? `${plural(hiddenAlerts, 'alerta oculta', 'alertas ocultas')} de otro tipo. ` +
+                    'Pulsa «Solo las que cuentan» para verlas. En Home Office no se espera que ' +
+                    'todos marquen cada día, así que una ausencia no prueba nada: aquí cuentan ' +
+                    'las entradas tardías y los relojes fuera de hora.'
+                  : ''}
+              </p>
 
               <AlertsPanel alerts={visibleAlerts} timeZone={timeZone} boardDate={shownDate} />
             </section>

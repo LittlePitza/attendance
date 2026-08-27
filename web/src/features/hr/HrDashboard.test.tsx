@@ -2,11 +2,13 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RpcError } from '../../lib/errors';
-import type { OpenAlert, Profile, TeamMember } from '../../lib/types';
+import type { EmployeeSummary, OpenAlert, Profile, TeamMember } from '../../lib/types';
 import { HrDashboard } from './HrDashboard';
 
 const teamDay = vi.fn<() => Promise<TeamMember[]>>();
 const openAlerts = vi.fn<() => Promise<OpenAlert[]>>();
+const employeeSummary = vi.fn<(id: string, days?: number) => Promise<EmployeeSummary>>();
+const employeeSessions = vi.fn<() => Promise<[]>>();
 
 /**
  * Today, in the zone the board itself reads dates in.
@@ -28,6 +30,8 @@ vi.mock('../../lib/api', () => ({
   api: {
     teamDay: () => teamDay(),
     openAlerts: () => openAlerts(),
+    employeeSummary: (id: string, days?: number) => employeeSummary(id, days),
+    employeeSessions: () => employeeSessions(),
     serverTime: () => Promise.resolve({ utc: '2026-08-24T15:00:00Z', epoch_ms: 1787000000000 }),
   },
 }));
@@ -47,6 +51,48 @@ function member(over: Partial<TeamMember> & { employee_id: string }): TeamMember
     needs_review: false,
     entry_expected: '09:00:00',
     exit_expected: '18:00:00',
+    ...over,
+  };
+}
+
+function record(over: Partial<EmployeeSummary> = {}): EmployeeSummary {
+  return {
+    employee_id: '1',
+    employee_name: 'Ana Ruiz',
+    employee_state: 'activo',
+    server_time: '2026-08-27T15:00:00Z',
+    time_zone: 'America/Mexico_City',
+    from: '2026-07-29',
+    to: '2026-08-27',
+    days: 30,
+    worked_seconds: 27_000,
+    break_seconds: 3600,
+    expected_seconds: 28_800,
+    days_scheduled: 22,
+    days_worked: 4,
+    days_complete: 3,
+    late_days: 1,
+    on_time_days: 3,
+    absent_days: 0,
+    punctuality_pct: 75,
+    average_entry: '09:04',
+    streak_days: 3,
+    offline_days: 0,
+    no_connection_alerts: 0,
+    expired_sessions: 0,
+    weeks: [
+      {
+        week_start: '2026-08-24',
+        days_scheduled: 5,
+        days_worked: 4,
+        days_complete: 3,
+        worked_seconds: 27_000,
+        break_seconds: 3600,
+        expected_seconds: 28_800,
+        late_days: 1,
+      },
+    ],
+    series: [],
     ...over,
   };
 }
@@ -78,6 +124,8 @@ beforeEach(() => {
     member({ employee_id: '3', employee_name: 'Carla Sosa', state: 'not_started', opened_at: null }),
   ]);
   openAlerts.mockResolvedValue([]);
+  employeeSummary.mockResolvedValue(record());
+  employeeSessions.mockResolvedValue([]);
 });
 
 describe('HrDashboard', () => {
@@ -123,6 +171,105 @@ describe('HrDashboard', () => {
     expect(screen.getByText('Beto Lara')).toBeInTheDocument();
   });
 
+  it('shows only people who registered an entry when Home Office is selected', async () => {
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    const homeOffice = screen.getByRole('button', { name: 'Solo Home Office' });
+    await userEvent.click(homeOffice);
+
+    expect(homeOffice).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Ana Ruiz')).toBeInTheDocument();
+    expect(screen.getByText('Beto Lara')).toBeInTheDocument();
+    expect(screen.queryByText('Carla Sosa')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '2 de 3 personas' })).toBeInTheDocument();
+  });
+
+  it('opens the selected employee record without exposing administrative actions', async () => {
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    const select = screen.getByRole('button', { name: 'Abrir ficha de Ana Ruiz, Sistemas, trabajando' });
+    await userEvent.click(select);
+
+    expect(select).toHaveAttribute('aria-expanded', 'true');
+    expect(await screen.findByRole('heading', { name: 'Ana Ruiz' })).toBeInTheDocument();
+    expect(screen.getByText('Horas trabajadas')).toBeInTheDocument();
+    expect(screen.getByText('75%')).toBeInTheDocument();
+    expect(employeeSummary).toHaveBeenCalledWith('1', 30);
+    expect(screen.queryByRole('button', { name: 'Editar ficha' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reiniciar jornada' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Dar de baja' })).toBeNull();
+  });
+
+  it('reports how many days of the week were taken as Home Office', async () => {
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir ficha de Ana Ruiz, Sistemas, trabajando' }));
+
+    const weeks = await screen.findByRole('table', { name: 'Resumen semanal' });
+    expect(within(weeks).getByRole('columnheader', { name: 'Home Office' })).toBeInTheDocument();
+
+    const week = within(weeks).getByRole('row', { name: /24 ago/ });
+    expect(within(week).getByText('4 días')).toBeInTheDocument();
+  });
+
+  it('reloads the record when the selection moves to another person', async () => {
+    // Beto's read is held open, so the assertions land in the window where the
+    // heading already says Beto and the figures have not arrived yet.
+    let releaseBeto = (): void => undefined;
+    const betoPending = new Promise<EmployeeSummary>((resolve) => {
+      releaseBeto = () =>
+        resolve(record({ employee_id: '2', employee_name: 'Beto Lara', punctuality_pct: 40 }));
+    });
+
+    employeeSummary.mockImplementation((id: string) =>
+      id === '1'
+        ? Promise.resolve(
+            record({ employee_id: '1', employee_name: 'Ana Ruiz', punctuality_pct: 75 }),
+          )
+        : betoPending,
+    );
+
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir ficha de Ana Ruiz, Sistemas, trabajando' }));
+    expect(await screen.findByText('75%')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir ficha de Beto Lara, Compras, en pausa' }));
+
+    // The heading and the figures have to describe the same person. Beto's name
+    // over Ana's punctuality is the worst kind of wrong: it looks right.
+    const box = await screen.findByRole('region', { name: 'Beto Lara' });
+    expect(within(box).queryByText('75%')).not.toBeInTheDocument();
+
+    releaseBeto();
+    expect(await within(box).findByText('40%')).toBeInTheDocument();
+  });
+
+  it('takes focus when the record opens and hands it back on Escape', async () => {
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    const opener = screen.getByRole('button', {
+      name: 'Abrir ficha de Ana Ruiz, Sistemas, trabajando',
+    });
+    await userEvent.click(opener);
+
+    // The record renders after the whole board, so without this a keyboard user
+    // would have to tab past every remaining row to reach what they just asked
+    // for.
+    const box = await screen.findByRole('region', { name: 'Ana Ruiz' });
+    await waitFor(() => expect(box).toHaveFocus());
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.queryByRole('region', { name: 'Ana Ruiz' })).not.toBeInTheDocument();
+    await waitFor(() => expect(opener).toHaveFocus());
+  });
+
   it('says so plainly when a filter matches nobody', async () => {
     show();
     await screen.findByText('Ana Ruiz');
@@ -132,7 +279,7 @@ describe('HrDashboard', () => {
     expect(await screen.findByText(/Nadie coincide con este filtro/)).toBeInTheDocument();
   });
 
-  it('counts alerts on the row of the person they belong to', async () => {
+  it('counts what it can judge and keeps the rest one click away', async () => {
     openAlerts.mockResolvedValue([
       {
         id: 'a1',
@@ -143,6 +290,72 @@ describe('HrDashboard', () => {
         severity: 'high',
         state: 'open',
         details: { entry_until: '09:30', minutes_overdue: 42 },
+        created_at: '2026-08-24T15:40:00Z',
+        notified_at: null,
+      },
+      {
+        id: 'a2',
+        employee_id: '1',
+        employee_name: 'Ana Ruiz',
+        alert_date: TODAY,
+        kind: 'late_entry',
+        severity: 'medium',
+        state: 'open',
+        details: { minutes_late: 18, arrived_at: '09:18' },
+        created_at: '2026-08-24T15:20:00Z',
+        notified_at: null,
+      },
+      {
+        id: 'a3',
+        employee_id: '2',
+        employee_name: 'Beto Lara',
+        alert_date: TODAY,
+        kind: 'clock_tampered',
+        severity: 'high',
+        state: 'open',
+        details: { skew_minutes: 22 },
+        created_at: '2026-08-24T15:30:00Z',
+        notified_at: null,
+      },
+    ]);
+
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    // Home Office means nobody is expected to punch every day, so the absence
+    // steps aside. The late entry and the moved clock are both evidence.
+    const stats = screen.getByRole('region', { name: 'Resumen del día' });
+    const counter = within(stats).getByRole('button', { name: /Alertas/ });
+    await waitFor(() => expect(counter).toHaveAccessibleName(/Alertas2.*2 personas/));
+
+    await userEvent.click(navLink(/Alertas/));
+
+    expect(await screen.findByText('Entrada tardía')).toBeInTheDocument();
+    expect(screen.getByText('Reloj fuera de hora')).toBeInTheDocument();
+    expect(screen.queryByText('Sin entrada')).not.toBeInTheDocument();
+    expect(screen.getByText(/1 alerta oculta/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Solo las que cuentan' }));
+
+    expect(await screen.findByText('Sin entrada')).toBeInTheDocument();
+    expect(screen.getByText('Entrada tardía')).toBeInTheDocument();
+
+    // The subtitle counts what is on screen. Describing one alta while showing
+    // two altas and a media is the summary disagreeing with its own list.
+    expect(screen.getByText('2 altas · 1 media · 0 bajas')).toBeInTheDocument();
+  });
+
+  it('counts alerts on the row of the person they belong to', async () => {
+    openAlerts.mockResolvedValue([
+      {
+        id: 'a1',
+        employee_id: '3',
+        employee_name: 'Carla Sosa',
+        alert_date: TODAY,
+        kind: 'late_entry',
+        severity: 'high',
+        state: 'open',
+        details: { minutes_late: 42, arrived_at: '09:42' },
         created_at: '2026-08-24T15:40:00Z',
         notified_at: null,
       },
@@ -161,7 +374,7 @@ describe('HrDashboard', () => {
     const panel = await screen.findByRole('heading', { name: 'Alertas abiertas' });
     const card = panel.closest('section');
     expect(card).not.toBeNull();
-    expect(within(card as HTMLElement).getByText('Sin entrada')).toBeInTheDocument();
+    expect(within(card as HTMLElement).getByText('Entrada tardía')).toBeInTheDocument();
     expect(within(card as HTMLElement).getByText(/42 min/)).toBeInTheDocument();
   });
 

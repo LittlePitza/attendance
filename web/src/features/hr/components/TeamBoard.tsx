@@ -25,10 +25,17 @@ export function TeamBoard({
   team,
   timeZone,
   alertsByEmployee,
+  selectedId,
+  onSelect,
+  recordId,
 }: {
   readonly team: readonly TeamMember[];
   readonly timeZone: string;
   readonly alertsByEmployee: ReadonlyMap<string, number>;
+  /** Whose record is open below the board, if anybody's. */
+  readonly selectedId: string | null;
+  readonly onSelect: (employeeId: string) => void;
+  readonly recordId: string;
 }): JSX.Element {
   if (team.length === 0) {
     return (
@@ -42,14 +49,33 @@ export function TeamBoard({
     <ul className="rows">
       {team.map((member, index) => {
         const alerts = alertsByEmployee.get(member.employee_id) ?? 0;
+        const open = selectedId === member.employee_id;
 
         return (
           <li
             key={member.employee_id}
-            className="row"
+            className={open ? 'row row--on' : 'row'}
             style={{ '--index': Math.min(index, 14) } as CSSProperties}
           >
-            <span className="row__who">
+            <button
+              className="row__who row__select"
+              type="button"
+              data-employee={member.employee_id}
+              aria-expanded={open}
+              /* Only while the record exists: an IDREF pointing at an absent
+                * id is a broken reference, and every collapsed row would be
+                * claiming to control a region that is not in the document. */
+              {...(open ? { 'aria-controls': recordId } : {})}
+              /* The department is inside the button, so an aria-label naming
+               * only the person would drop it from the accessibility tree --
+               * and the row carries it nowhere else. */
+              aria-label={`${open ? 'Cerrar' : 'Abrir'} ficha de ${member.employee_name}, ${
+                member.department ?? 'sin departamento'
+              }, ${STATE_LABELS[member.state].toLowerCase()}${
+                alerts > 0 ? `, ${plural(alerts, 'alerta', 'alertas')}` : ''
+              }`}
+              onClick={() => onSelect(member.employee_id)}
+            >
               <span className="row__avatar" aria-hidden="true">
                 {initials(member.employee_name)}
               </span>
@@ -57,7 +83,7 @@ export function TeamBoard({
                 <span className="row__name">{member.employee_name}</span>
                 <span className="row__dept">{member.department ?? 'Sin departamento'}</span>
               </span>
-            </span>
+            </button>
 
             <span className={`state state--${TONES[member.state]}`}>
               <span className="dot" aria-hidden="true" />
