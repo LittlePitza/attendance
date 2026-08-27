@@ -407,7 +407,10 @@ function Devices({ devices }: { readonly devices: readonly DossierDevice[] }): J
 }
 
 function Alerts({ alerts }: { readonly alerts: readonly DossierAlert[] }): JSX.Element {
-  const open = alerts.filter((alert) => alert.state === 'open').length;
+  const open = alerts.filter(
+    (alert) => alert.state === 'open' && alert.superseded_at === null,
+  ).length;
+  const voided = alerts.filter((alert) => alert.superseded_at !== null).length;
 
   return (
     <div className="dossier__section">
@@ -423,10 +426,18 @@ function Alerts({ alerts }: { readonly alerts: readonly DossierAlert[] }): JSX.E
           <p className="dossier__note">
             Todas las del rango, no solo las abiertas ({open} sin atender). Una que RH descartó
             sigue aquí: el historial es el historial.
+            {voided > 0 &&
+              ` ${String(voided)} quedaron sin efecto porque se anularon los marcajes que las` +
+                ' originaron — no cuentan en ninguna cifra.'}
           </p>
           <ul className="dossier__alerts">
             {alerts.map((alert) => (
-              <li className="dossier__alert" key={alert.id}>
+              <li
+                className={
+                  alert.superseded_at === null ? 'dossier__alert' : 'dossier__alert is-void'
+                }
+                key={alert.id}
+              >
                 <span
                   className={`alert__stripe alert__stripe--${alert.severity}`}
                   aria-hidden="true"
@@ -438,17 +449,26 @@ function Alerts({ alerts }: { readonly alerts: readonly DossierAlert[] }): JSX.E
                     {alert.note !== null && alert.note !== '' && ` · ${alert.note}`}
                   </span>
                 </span>
-                <span
-                  className={
-                    alert.state === 'open'
-                      ? 'pill pill--warn'
-                      : alert.state === 'dismissed'
-                        ? 'pill pill--mute'
-                        : 'pill pill--good'
-                  }
-                >
-                  {ALERT_STATE_LABELS[alert.state]}
-                </span>
+                {alert.superseded_at !== null ? (
+                  <span
+                    className="pill pill--mute"
+                    title="Se anularon los marcajes que la originaron, así que no cuenta en ninguna cifra."
+                  >
+                    Sin efecto
+                  </span>
+                ) : (
+                  <span
+                    className={
+                      alert.state === 'open'
+                        ? 'pill pill--warn'
+                        : alert.state === 'dismissed'
+                          ? 'pill pill--mute'
+                          : 'pill pill--good'
+                    }
+                  >
+                    {ALERT_STATE_LABELS[alert.state]}
+                  </span>
+                )}
               </li>
             ))}
           </ul>

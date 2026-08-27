@@ -1846,10 +1846,17 @@ button.stat:hover {
 }
 
 /* A voided punch stays visible and reads as withdrawn. Hiding it would leave a
- * zeroed counter with nothing to explain it. */
+ * zeroed counter with nothing to explain it. An alert whose punches were voided
+ * gets the same treatment for the same reason. */
 .dossier__table tbody tr.is-void th,
-.dossier__table tbody tr.is-void td {
+.dossier__table tbody tr.is-void td,
+.dossier__alert.is-void .dossier__alert-kind,
+.dossier__alert.is-void .dossier__alert-note {
   color: var(--ink-faint);
+}
+
+.dossier__alert.is-void {
+  border-style: dashed;
 }
 
 .dossier__ip {

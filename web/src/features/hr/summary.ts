@@ -221,7 +221,15 @@ export function cumulativeArrivals(buckets: readonly HourBucket[]): ArrivalPoint
  *     and this board is its only surface. Filing it away with the absences
  *     would hide the single thing here nobody should be able to hide.
  */
-export const COUNTABLE_ALERT_KINDS: readonly AlertKind[] = ['late_entry', 'clock_tampered'];
+export const COUNTABLE_ALERT_KINDS: readonly AlertKind[] = [
+  'late_entry',
+  // Same standing as a late arrival, and for the same reason: the person was
+  // here, they clocked out, and the clock says when. It is a recorded fact
+  // rather than a silence this tool created, which is the whole test for
+  // whether a kind belongs in this list.
+  'early_exit',
+  'clock_tampered',
+];
 
 export function countable(alerts: readonly OpenAlert[]): OpenAlert[] {
   return alerts.filter((alert) => COUNTABLE_ALERT_KINDS.includes(alert.kind));

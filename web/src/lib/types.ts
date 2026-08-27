@@ -179,6 +179,12 @@ export const ALERT_KINDS = [
   'missing_entry',
   'break_exceeded',
   'missing_exit',
+  /**
+   * Closed the day earlier than the schedule allows. The mirror of
+   * `missing_exit`, which is a day left open long after it -- the two require
+   * disjoint workday states, so one day never collects both.
+   */
+  'early_exit',
   'no_connection',
   'review_offline',
   'clock_tampered',
@@ -894,6 +900,13 @@ export interface DossierAlert {
   readonly details: Readonly<Record<string, unknown>>;
   readonly note: string | null;
   readonly created_at: string;
+  /**
+   * Set when the punches this alert was about stopped counting -- a day reset
+   * voided them. The row is kept and shown, but it counts towards nothing and
+   * no longer holds the day's slot for its kind. `state` is untouched: what HR
+   * decided is still what HR decided.
+   */
+  readonly superseded_at: string | null;
 }
 
 /** What somebody decided about this person's record, with the mandatory reason. */

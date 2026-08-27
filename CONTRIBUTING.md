@@ -112,6 +112,34 @@ four:
    the previous local day costs nothing and is what keeps an evening of missing
    exits from being lost.
 
+**Eight kinds, and the two exit rules are mirrors that cannot overlap.**
+`missing_exit` is a day still open long after its expected exit; `early_exit` is
+a day closed well before it. They require disjoint workday states -- `working`
+or `on_break` against `finished` -- so no day ever collects both. `early_exit`
+defaults to fifteen minutes, and a department where finishing early is normal
+turns it off on **Configuración → Alertas** rather than living with the noise.
+
+**An alert whose evidence stopped counting is superseded, not closed.** The
+unique `(employee_id, alert_date, kind)` and the upsert's `where a.state = 'open'`
+are each right and together had a hole: once an alert for a date was dismissed,
+no later alert of that kind could ever be raised for that date. Reset a day,
+arrive late again, and the evaluator computed the alert correctly, hit the
+conflict, found the row was not `open`, and updated nothing.
+
+`reset_day()` now stamps `superseded_at` on the alerts whose punches it voided,
+the unique index is narrowed to rows where that is null, and the slot frees up.
+It is deliberately not the same as closing them -- `state` is left exactly as HR
+left it -- because recording that the evidence was discarded is a fact about the
+punches, while deciding what the alert was worth is HR's. A superseded row counts
+towards nothing in six readers, listed in the migration that changed them; the
+dossier is the one exception and shows them marked, because a page about one
+person exists to show what the record holds.
+
+**`missing_entry` is never superseded.** Every other kind points at a punch, and
+voiding the punch takes its evidence away. `missing_entry` points at an *absence*,
+which voiding the day's punches only makes more true -- so superseding it would
+free a slot for an alert identical to the one already there.
+
 Thresholds resolve department > global > the evaluator's own defaults. **No row
 in `alert_rules` is not the same as a disabled rule**: a missing row falls back
 to the default, so an alert kind is never switched off by absent configuration.
@@ -208,9 +236,10 @@ happened rather than a notification to clear.
 **What the board counts, it counts on purpose.** Not everybody punches every
 day -- some days are worked from the office, and this system only ever sees the
 Home Office ones. That makes an absence evidence of nothing, so `missing_entry`,
-`missing_exit` and `break_exceeded` step aside by default. Two kinds survive,
-for opposite reasons: `late_entry` is a recorded fact, and `clock_tampered` is
-the one alert somebody had to cause on purpose. The ones that step aside are
+`missing_exit` and `break_exceeded` step aside by default. Three kinds survive,
+and the test is whether the alert is a recorded fact or a silence this tool
+created: `late_entry` and `early_exit` are both the clock saying when somebody
+was here, and `clock_tampered` is the one alert somebody had to cause on purpose. The ones that step aside are
 counted where they were hidden and one press brings them back -- an alert that
 vanishes without trace is how an alert gets lost.
 

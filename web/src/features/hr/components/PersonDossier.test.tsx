@@ -86,6 +86,7 @@ function dossier(over: Partial<EmployeeDossier> = {}): EmployeeDossier {
         details: {},
         note: 'Se justificó',
         created_at: '2026-08-26T16:00:00Z',
+        superseded_at: null,
       },
     ],
     adjustments: [
@@ -237,6 +238,57 @@ describe('PersonDossier', () => {
     const buttons = screen.getAllByRole('button').map((button) => button.textContent ?? '');
     // Only the two people in the picker. No reset, no revoke, no dismiss.
     expect(buttons.filter((label) => /anular|revocar|reiniciar|descartar/i.test(label))).toEqual([]);
+  });
+
+  it('marks an alert whose punches were voided, and stops counting it', () => {
+    draw({
+      dossier: dossier({
+        alerts: [
+          {
+            id: 'al1',
+            alert_date: '2026-08-26',
+            kind: 'late_entry',
+            severity: 'medium',
+            state: 'open',
+            details: {},
+            note: null,
+            created_at: '2026-08-26T16:00:00Z',
+            // The day was reset, so the arrival this describes was discarded.
+            superseded_at: '2026-08-27T18:50:00Z',
+          },
+        ],
+      }),
+    });
+
+    // Still on the page -- it is a history -- but not presented as open work,
+    // and the note says why so nobody adds it to a total by eye.
+    expect(screen.getByText('Sin efecto')).toBeInTheDocument();
+    expect(screen.queryByText('Abierta')).not.toBeInTheDocument();
+    expect(screen.getByText(/\(0 sin atender\)/)).toBeInTheDocument();
+    expect(screen.getByText(/quedaron sin efecto/)).toBeInTheDocument();
+  });
+
+  it('names leaving early as its own thing, not a missing exit', () => {
+    draw({
+      dossier: dossier({
+        alerts: [
+          {
+            id: 'al2',
+            alert_date: '2026-08-26',
+            kind: 'early_exit',
+            severity: 'medium',
+            state: 'open',
+            details: { minutes_early: 180, left_at: '15:00', expected_at: '18:00' },
+            note: null,
+            created_at: '2026-08-26T21:00:00Z',
+            superseded_at: null,
+          },
+        ],
+      }),
+    });
+
+    expect(screen.getByText('Salida temprana')).toBeInTheDocument();
+    expect(screen.queryByText('Sin salida')).not.toBeInTheDocument();
   });
 
   it('lists people one per row rather than as a wrapping cloud of chips', () => {

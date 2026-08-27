@@ -65,6 +65,7 @@ export const ALERT_LABELS: Readonly<Record<AlertKind, string>> = {
   missing_entry: 'Sin entrada',
   break_exceeded: 'Pausa excedida',
   missing_exit: 'Sin salida',
+  early_exit: 'Salida temprana',
   no_connection: 'Sin señal',
   review_offline: 'Por revisar',
   clock_tampered: 'Reloj fuera de hora',
@@ -183,6 +184,8 @@ export function describeAlert(kind: AlertKind, details: Readonly<Record<string, 
       return `${show(details.break_minutes)} min de ${show(details.allowed_minutes)} permitidos`;
     case 'missing_exit':
       return `Salida esperada ${show(details.exit_expected)} · ${show(details.minutes_overdue)} min`;
+    case 'early_exit':
+      return `${show(details.minutes_early)} min antes · salió ${show(details.left_at)} de ${show(details.expected_at)}`;
     case 'no_connection':
       return `Sin señal desde ${show(details.last_signal_at)} · ${show(details.minutes_silent)} min`;
     case 'review_offline':

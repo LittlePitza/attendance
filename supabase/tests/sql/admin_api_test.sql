@@ -170,7 +170,7 @@ begin
   perform set_config('role', 'postgres', true);
 
   insert into test_results(name, expected, got, passed) values
-    ('HR sees the seven seeded rules', '7', v_count::text, v_count = 7);
+    ('HR sees every seeded rule, one per kind', '8', v_count::text, v_count = 8);
 
   -- No refusal here, and that is the design: alert_rules_read is the gate, so an
   -- employee gets an empty answer rather than an error. A second role check
@@ -612,8 +612,11 @@ begin
   select count(*) into v_count
     from attendance.alert_rules r where r.department_id is null;
 
+  -- One global row per alert kind. The count is written out rather than derived
+  -- so that adding a kind without seeding its row is a failing test rather than
+  -- a rule that quietly never appears on Configuracion -> Alertas.
   insert into test_results(name, expected, got, passed) values
-    ('there are still seven global rules', '7', v_count::text, v_count = 7);
+    ('there is still one global rule per kind', '8', v_count::text, v_count = 8);
 
   select r.recipients into v_text
     from attendance.alert_rules r

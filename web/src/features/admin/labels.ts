@@ -50,6 +50,7 @@ export const THRESHOLD_MEANING: Readonly<Record<AlertKind, string>> = {
   missing_entry: 'minutos después de que cierra la ventana de entrada',
   break_exceeded: 'minutos por encima de la pausa máxima',
   missing_exit: 'minutos después de la salida esperada con la jornada abierta',
+  early_exit: 'minutos antes de la salida esperada, con la jornada ya cerrada',
   no_connection: 'minutos sin señal mientras la persona trabaja',
   review_offline: 'no usa umbral: se levanta en cuanto un marcaje llega marcado',
   clock_tampered: 'minutos de desfase del reloj del equipo',

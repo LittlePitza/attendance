@@ -201,6 +201,14 @@ begin
   insert into test_results(name, expected, got, passed) values
     ('a reset without a real reason is refused', 'refused', v_text, v_ok);
 
+  -- Two alerts to reset over, chosen because the reset must treat them
+  -- differently: `late_entry` points at a punch that is about to be voided, and
+  -- `missing_entry` points at an absence that voiding the punches only makes
+  -- more true.
+  insert into attendance.alerts (employee_id, alert_date, kind, severity, state)
+  values (v_emp2, v_today, 'late_entry',    'medium', 'dismissed'),
+         (v_emp2, v_today, 'missing_entry', 'high',   'open');
+
   perform set_config('role', 'authenticated', true);
   perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
   v_result := public.reset_day(v_emp2, 'Marco la jornada equivocada por error');
@@ -248,6 +256,39 @@ begin
 
   insert into test_results(name, expected, got, passed) values
     ('the reset is in the audit trail', '1', v_count::text, v_count = 1);
+
+  -- The alert whose punch was voided stops being the live one for the day, so a
+  -- later arrival can raise its own. It is not closed: `state` is exactly what
+  -- HR left it, and the row is still there.
+  select a.superseded_at is not null, a.state into v_ok, v_text
+    from attendance.alerts a
+   where a.employee_id = v_emp2 and a.alert_date = v_today and a.kind = 'late_entry';
+
+  insert into test_results(name, expected, got, passed) values
+    ('an alert about a voided punch is left without effect', 'true dismissed',
+     format('%s %s', coalesce(v_ok::text, 'null'), coalesce(v_text, 'gone')),
+     v_ok and v_text = 'dismissed');
+
+  insert into test_results(name, expected, got, passed) values
+    ('and the reset says how many it took out', '1',
+     coalesce(v_result ->> 'alerts_superseded', 'null'),
+     (v_result ->> 'alerts_superseded')::integer = 1);
+
+  -- The one kind it must not touch. Its evidence is an absence, and discarding
+  -- the day's punches makes the claim stronger -- superseding it would free a
+  -- slot for an alert identical to the one already there.
+  select a.superseded_at is null into v_ok
+    from attendance.alerts a
+   where a.employee_id = v_emp2 and a.alert_date = v_today and a.kind = 'missing_entry';
+
+  insert into test_results(name, expected, got, passed) values
+    ('a missing entry survives the reset, because the day is still missing one',
+     'true', coalesce(v_ok::text, 'null'), v_ok);
+
+  insert into test_results(name, expected, got, passed) values
+    ('and it is still reported as open work', '1',
+     coalesce(v_result ->> 'open_alerts', 'null'),
+     (v_result ->> 'open_alerts')::integer = 1);
 
   -- Twice is not twice as reset. The second call finds nothing that still
   -- counts and says so, rather than writing a second set of void rows.

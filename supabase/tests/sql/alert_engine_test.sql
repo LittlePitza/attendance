@@ -47,10 +47,11 @@ declare
   v_count   integer;
   v_text    text;
   v_alert   uuid;
+  v_late    boolean;
 
   d_a  date; d_b date; d_c date; d_c2 date; d_d date; d_e date;
   d_f  date; d_g date; d_h date; d_i date;  d_j date; d_k date;
-  d_l  date;
+  d_l  date; d_m date; d_n date;
 begin
   select id into v_uid1 from auth.users order by created_at, id limit 1;
   select id into v_emp1 from public.empleados where estado = 'activo' order by nombre limit 1;
@@ -106,6 +107,8 @@ begin
   -- The most recent Saturday on or before that date: the global schedule runs
   -- Monday to Friday, so the second employee has no schedule at all that day.
   d_h  := (v_today - 30) - ((extract(isodow from (v_today - 30))::integer + 1) % 7);
+  d_m  := v_today - 60;
+  d_n  := v_today - 63;
   d_i  := v_today - 45;
   d_j  := v_today - 48;
   -- The most recent Monday, where the global schedule does apply.
@@ -506,6 +509,122 @@ begin
   insert into test_results(name, expected, got, passed) values
     ('every alert leaves a queued notification', '0 without one',
      v_count || ' without one', v_count = 0);
+
+  -- ================================================= PHASE L: early_exit ===
+  -- Closed the day at 15:00 against an expected exit of 18:00. Three hours is
+  -- well past the fifteen-minute default, and nothing described this before:
+  -- `missing_exit` is the opposite case and requires the day to still be open.
+
+  v_now := (d_m + time '19:00') at time zone v_zone;
+
+  insert into attendance.workdays (
+    employee_id, work_date, state, schedule_id, time_zone,
+    opened_at, closed_at, last_heartbeat
+  )
+  values (
+    v_emp1, d_m, 'finished', v_sched, v_zone,
+    (d_m + time '09:00') at time zone v_zone,
+    (d_m + time '15:00') at time zone v_zone,
+    (d_m + time '15:00') at time zone v_zone
+  );
+
+  v_result := attendance.evaluate_alerts(v_now);
+
+  select details into v_details from attendance.alerts
+   where employee_id = v_emp1 and alert_date = d_m and kind = 'early_exit';
+
+  insert into test_results(name, expected, got, passed) values
+    ('early_exit measures how long before the expected exit', '180',
+     coalesce(v_details->>'minutes_early', 'no alert'),
+     (v_details->>'minutes_early') = '180');
+
+  insert into test_results(name, expected, got, passed) values
+    ('and says which hour it compared against', '18:00',
+     coalesce(v_details->>'expected_at', 'no alert'),
+     (v_details->>'expected_at') = '18:00');
+
+  -- The two exit rules require disjoint states, so a day can never collect
+  -- both. A day that closed early is not a day somebody forgot to close.
+  select count(*), string_agg(kind, ',' order by kind) into v_count, v_text
+    from attendance.alerts where employee_id = v_emp1 and alert_date = d_m;
+
+  insert into test_results(name, expected, got, passed) values
+    ('leaving early raises nothing else, and never missing_exit', '1 early_exit',
+     v_count || ' ' || coalesce(v_text, 'none'),
+     v_count = 1 and v_text = 'early_exit');
+
+  -- ============================== PHASE M: an alert whose evidence was voided ===
+  -- The exact sequence that used to end in silence: arrive late, HR dismisses
+  -- the alert, the day's punches are discarded, and the person clocks in late
+  -- again. The unique key was already taken by a row the upsert would not
+  -- touch, so the second arrival raised nothing at all.
+
+  v_now := (d_n + time '10:00') at time zone v_zone;
+
+  insert into attendance.workdays (
+    employee_id, work_date, state, schedule_id, time_zone,
+    opened_at, last_heartbeat
+  )
+  values (
+    v_emp1, d_n, 'working', v_sched, v_zone,
+    (d_n + time '09:30') at time zone v_zone,
+    v_now - interval '2 minutes'
+  );
+
+  v_result := attendance.evaluate_alerts(v_now);
+
+  select id into v_alert from attendance.alerts
+   where employee_id = v_emp1 and alert_date = d_n and kind = 'late_entry';
+
+  select late into v_late
+    from internal.resolved_days(array[v_emp1], d_n, d_n);
+
+  insert into test_results(name, expected, got, passed) values
+    ('the first late arrival marks the day late', 'true',
+     coalesce(v_late::text, 'null'), v_late);
+
+  -- HR decides it was nothing, and then the punches behind it are voided --
+  -- which is what `reset_day()` does, spelled out here so this suite tests the
+  -- evaluator rather than the writer.
+  update attendance.alerts set state = 'dismissed' where id = v_alert;
+  update attendance.alerts set superseded_at = now() where id = v_alert;
+
+  select late into v_late
+    from internal.resolved_days(array[v_emp1], d_n, d_n);
+
+  insert into test_results(name, expected, got, passed) values
+    ('an alert about a voided punch stops marking the day late', 'false',
+     coalesce(v_late::text, 'null'), v_late is false);
+
+  -- The day is punched again, later. This is the assertion the bug was.
+  update attendance.workdays
+     set opened_at = (d_n + time '11:00') at time zone v_zone
+   where employee_id = v_emp1 and work_date = d_n;
+
+  v_result := attendance.evaluate_alerts(v_now + interval '2 hours');
+
+  select count(*)::integer into v_count from attendance.alerts
+   where employee_id = v_emp1 and alert_date = d_n and kind = 'late_entry';
+
+  insert into test_results(name, expected, got, passed) values
+    ('a superseded alert does not block its replacement', '2',
+     v_count::text, v_count = 2);
+
+  select details into v_details from attendance.alerts
+   where employee_id = v_emp1 and alert_date = d_n and kind = 'late_entry'
+     and superseded_at is null;
+
+  insert into test_results(name, expected, got, passed) values
+    ('and the live one describes the arrival that counts', '11:00',
+     coalesce(v_details->>'arrived_at', 'no alert'),
+     (v_details->>'arrived_at') = '11:00');
+
+  -- The old row is still there. Nothing deletes here, and the dossier shows it.
+  select state into v_text from attendance.alerts where id = v_alert;
+
+  insert into test_results(name, expected, got, passed) values
+    ('the superseded alert is kept, with the decision HR made on it', 'dismissed',
+     coalesce(v_text, 'gone'), v_text = 'dismissed');
 
   -- ============================================================== restore ===
   update public.empleados set auth_user_id = null where id in (v_emp1, v_emp2);
