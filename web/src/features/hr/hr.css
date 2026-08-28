@@ -906,18 +906,26 @@ button.stat:hover {
 
 /* The signal is the second line of a two-item list, not a badge of its own.
  *
- * The metrics are the state pill's, and deliberately: `.state` carries
- * `padding-left: 0.45rem` before its dot, so a signal with no padding could
- * never line its dot up with it -- the two would sit a fraction apart, which
- * reads as a mistake rather than as a list. Same padding, same gap, same dot,
- * one vertical line. What separates them is colour and weight, not size. */
+ * Every metric that positions it is the state pill's, and deliberately:
+ * `.state` carries `padding-left: 0.45rem` before its dot, so a signal with no
+ * padding could never line its dot up with it -- the two would sit a fraction
+ * apart, which reads as a mistake rather than as a list. Same padding, same
+ * gap, same dot, one vertical line.
+ *
+ * The type is the one thing that is not shared. The state is what the person is
+ * doing and the signal is only whether their machine is still saying so, so it
+ * sits two pixels under it rather than beside it as an equal. Ten pixels is the
+ * floor and not a preference: `Sin reportar 25 min` is the one line on this
+ * board somebody has to act on, and shrinking it further would trade legibility
+ * for hierarchy it has already won. All of these are `rem`, so the padding, the
+ * gap and the dot hold their place while the text alone gets smaller. */
 .signal {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
   max-width: 100%;
   padding-left: 0.45rem;
-  font-size: 0.75rem;
+  font-size: 0.625rem;
   font-weight: 500;
   line-height: 1.2;
   color: var(--ink-soft);
