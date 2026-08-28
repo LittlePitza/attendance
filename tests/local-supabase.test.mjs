@@ -42,7 +42,7 @@ test('prepareWorkspace creates an isolated local Supabase project', async (t) =>
   assert.ok(migrations.includes('20260827144253_attendance_sessions_and_stats.sql'));
   assert.ok(migrations.includes('20260827162327_attendance_workforce_api.sql'));
   assert.ok(migrations.includes('20260827185038_attendance_reports_api.sql'));
-  assert.ok(migrations.includes('20260827190500_report_population_and_expected_seconds.sql'));
+  assert.ok(migrations.includes('20260827190212_report_population_and_expected_seconds.sql'));
   assert.ok(migrations.includes('20260827192640_session_events.sql'));
   assert.ok(migrations.includes('20260827192732_employee_dossier.sql'));
   assert.ok(migrations.includes('20260827200000_alert_supersede_and_early_exit.sql'));
