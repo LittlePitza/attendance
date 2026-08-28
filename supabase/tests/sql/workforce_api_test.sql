@@ -635,14 +635,18 @@ begin
   insert into test_results(name, expected, got, passed) values
     ('an unscheduled day expects nothing, stated as zero', '0', v_count::text, v_count = 0);
 
-  -- The weeks are ISO weeks in the employee's own zone, which is the whole
-  -- reason they are grouped here and not in the browser.
+  -- The weeks are grouped in the employee's own zone, which is the whole reason
+  -- they are grouped here and not in the browser -- and they begin on the day
+  -- `internal.week_start_dow()` says, Thursday by default. Compared against the
+  -- resolver rather than against a literal: the assertion is that the grouping
+  -- agrees with the setting, and one written as `<> 4` would start failing the
+  -- day somebody moved it on Configuración → Periodos.
   select count(*)::integer into v_count
     from jsonb_array_elements(v_result -> 'weeks') as w
-   where extract(isodow from (w.value ->> 'week_start')::date) <> 1;
+   where extract(isodow from (w.value ->> 'week_start')::date) <> internal.week_start_dow();
 
   insert into test_results(name, expected, got, passed) values
-    ('every week starts on a Monday', '0', v_count::text, v_count = 0);
+    ('every week starts on the configured day', '0', v_count::text, v_count = 0);
 
   select coalesce(sum((w.value ->> 'worked_seconds')::integer), 0)::integer into v_count
     from jsonb_array_elements(v_result -> 'weeks') as w;

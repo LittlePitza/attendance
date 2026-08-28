@@ -685,6 +685,131 @@ begin
     ('an employee cannot change an alert rule', '42501',
      coalesce(v_sqlstate, 'no refusal'), v_sqlstate = '42501');
 
+  -- The kind list lives in three places: the CHECK on `alerts`, the CHECK on
+  -- `alert_rules`, and the guard inside `save_alert_rule()`. Widening the two
+  -- CHECKs and forgetting the guard leaves a row that is seeded, listed with a
+  -- threshold beside it, and refused the moment anybody presses save. This is
+  -- that assertion, and it fails for every kind added without the third edit.
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
+  v_result := public.save_alert_rule('early_exit', true, 20);
+  perform set_config('role', 'postgres', true);
+
+  select r.threshold_minutes into v_count
+    from internal.alert_rule(null, 'early_exit') r;
+
+  insert into test_results(name, expected, got, passed) values
+    ('every seeded kind can actually be saved, early_exit included', '20',
+     coalesce(v_count::text, 'none'), v_count = 20);
+
+  -- ============================================ PHASE D2: the week is a setting ===
+  -- `attendance.settings` is company-wide, so it is edited here rather than on a
+  -- department, and the refusals are what stop a screen writing a day that is
+  -- not a day.
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
+  v_result := public.attendance_settings();
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('HR reads the configured week start', '4',
+     coalesce(v_result ->> 'week_start_dow', 'null'),
+     (v_result ->> 'week_start_dow')::smallint = 4);
+
+  -- The policy is the gate, exactly as it is for list_alert_rules: an employee
+  -- gets nothing back rather than an error.
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid_emp)::text, true);
+  v_result := public.attendance_settings();
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('an employee reads no settings at all', 'null',
+     coalesce(v_result::text, 'null'), v_result is null);
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
+  v_result := public.save_settings(1::smallint);
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('HR can move the week start', '1',
+     coalesce(v_result ->> 'week_start_dow', 'null'),
+     (v_result ->> 'week_start_dow')::smallint = 1);
+
+  select count(*)::integer into v_count from attendance.settings;
+
+  insert into test_results(name, expected, got, passed) values
+    ('and it is still one row, never two', '1', v_count::text, v_count = 1);
+
+  select count(*)::integer into v_count
+    from attendance.audit_events e
+   where e.kind = 'settings_saved';
+
+  insert into test_results(name, expected, got, passed) values
+    ('the change is on the record', '1', v_count::text, v_count = 1);
+
+  v_sqlstate := null;
+  begin
+    perform set_config('role', 'authenticated', true);
+    perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
+    perform public.save_settings(8::smallint);
+  exception when others then
+    v_sqlstate := sqlstate;
+  end;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('a day outside 1..7 is refused', '22023',
+     coalesce(v_sqlstate, 'no refusal'), v_sqlstate = '22023');
+
+  v_sqlstate := null;
+  begin
+    perform set_config('role', 'authenticated', true);
+    perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
+    perform public.save_settings(null);
+  exception when others then
+    v_sqlstate := sqlstate;
+  end;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('and so is no day at all', '22023',
+     coalesce(v_sqlstate, 'no refusal'), v_sqlstate = '22023');
+
+  v_sqlstate := null;
+  begin
+    perform set_config('role', 'authenticated', true);
+    perform set_config('request.jwt.claims', json_build_object('sub', v_uid_emp)::text, true);
+    perform public.save_settings(1::smallint);
+  exception when others then
+    v_sqlstate := sqlstate;
+  end;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('an employee cannot move the week start', '42501',
+     coalesce(v_sqlstate, 'no refusal'), v_sqlstate = '42501');
+
+  -- The client never writes tables, and a settings row is the most tempting one
+  -- to write directly.
+  v_sqlstate := null;
+  begin
+    perform set_config('role', 'authenticated', true);
+    perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
+    update attendance.settings set week_start_dow = 3 where id;
+  exception when others then
+    v_sqlstate := sqlstate;
+  end;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('not even HR can write the settings row directly', '42501',
+     coalesce(v_sqlstate, 'no refusal'), v_sqlstate = '42501');
+
+  update attendance.settings set week_start_dow = 4 where id;
+
   -- =================================================== PHASE E: the contract ===
 
   select count(*) into v_count

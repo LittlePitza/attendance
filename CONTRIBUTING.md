@@ -119,6 +119,18 @@ or `on_break` against `finished` -- so no day ever collects both. `early_exit`
 defaults to fifteen minutes, and a department where finishing early is normal
 turns it off on **Configuración → Alertas** rather than living with the noise.
 
+**The list of kinds lives in three places, and all three have to move together.**
+The `CHECK` on `attendance.alerts`, the `CHECK` on `attendance.alert_rules`, and
+the guard inside `public.save_alert_rule()`. Widening the two constraints and
+forgetting the third is what nearly shipped with `early_exit`: the rule would
+have been seeded, listed on **Configuración → Alertas** with a threshold beside
+it, and refused with "Ese tipo de alerta no existe" the moment anybody pressed
+save -- a row that looks editable and is not. The guard is duplication and it
+earns its place: the constraint would reject the value too, but as a constraint
+violation rather than as the Spanish sentence the person reading the screen
+needs. `admin_api_test.sql` now saves `early_exit` through the function, so the
+next kind added fails locally until the third edit is made.
+
 **An alert whose evidence stopped counting is superseded, not closed.** The
 unique `(employee_id, alert_date, kind)` and the upsert's `where a.state = 'open'`
 are each right and together had a hole: once an alert for a date was dismissed,
@@ -145,8 +157,9 @@ in `alert_rules` is not the same as a disabled rule**: a missing row falls back
 to the default, so an alert kind is never switched off by absent configuration.
 
 Only employees who are active **and** linked to an account are evaluated:
-somebody who cannot punch cannot be late. The 31 accounts do not exist yet, so
-the evaluator raises nothing until they are provisioned.
+somebody who cannot punch cannot be late. Nine of the thirty-two on the roster
+have an account, so those nine are what the evaluator watches; provisioning
+somebody is what puts them under it.
 
 **Known gap:** there is no leave or absence table. Until there is one, a person
 on holiday collects a `missing_entry` every day, and HR dismisses them by hand.
@@ -233,6 +246,27 @@ facts the database already reported; lateness arrives as a `late_entry` alert.
 It also offers no way to close one, because an alert is a record of what
 happened rather than a notification to clear.
 
+**The board is about the people who can punch.** Thirty-two people are active
+and nine have an account; the other twenty-three have no way to clock in, so the
+board used to list them at `not_started` all day, every day -- rows that look
+like absence and are evidence of nothing. `team_day()` now reports
+`has_account`, and it is the same column `evaluate_alerts()` and
+`attendance_report()` already read, so all three agree about who is in scope.
+
+**The row set deliberately does not shrink, and that is the decision.**
+`team_day()` has three readers: the board, the Expedientes picker and Revisión.
+Filtering in SQL would have answered the question asked about the board by
+silently removing twenty-three people from two screens nobody complained about
+-- and Expedientes exists to show what the record holds about one person,
+including the person whose record is "no account, therefore nothing". So the
+function reports the fact and each screen decides what to draw with it. That is
+not the client deciding a rule: whether somebody can punch is resolved in SQL,
+once; which rows a screen paints is presentation, and the board already filters
+by name, state and department. The board says how many it is not showing and one
+press brings them back, for the same reason the hidden alert kinds are counted
+where they were hidden. `read_api_test.sql` asserts the unfiltered row set
+directly, so the filter cannot be "fixed" into a `where` clause later.
+
 **What the board counts, it counts on purpose.** Not everybody punches every
 day -- some days are worked from the office, and this system only ever sees the
 Home Office ones. That makes an absence evidence of nothing, so `missing_entry`,
@@ -246,11 +280,40 @@ vanishes without trace is how an alert gets lost.
 **Reportes is the same rule over a period instead of a day.** `attendance_report()`
 takes a scope -- `day`, `week` or `month` -- and an anchor, and resolves the
 bounds itself: "this week" has a wrong answer available in a browser (a Sunday
-start, or the reader's zone instead of the employee's) and none in SQL, where
-`date_trunc('week', ...)` is ISO. Stepping a period uses the bounds the answer
-carried rather than calendar arithmetic, because the day before a period's first
-day is inside the previous one whatever the scope and however many days the
-month had.
+start, or the reader's zone instead of the employee's) and none in SQL. Stepping
+a period uses the bounds the answer carried rather than calendar arithmetic,
+because the day before a period's first day is inside the previous one whatever
+the scope and however many days the month had.
+
+**A week runs Thursday to Wednesday, and that is a setting rather than a
+builtin.** It was ISO -- Monday to Sunday -- because `date_trunc('week', ...)`
+is ISO and that was the only correct answer available without asking anybody.
+The company's week is not, so `attendance.settings` holds the day and
+**Configuración → Periodos** is where it moves.
+
+Two things compute a week: the scope in `attendance_report()` and the weekly
+grouping in `internal.attendance_summary()`. If they disagreed, "semana" would
+mean one thing on Reportes and another in the box behind a name, and both would
+show a number with only one of them right -- so the offset is derived in
+`internal.week_start()` and both call it. The split between that function and
+`internal.week_start_dow()` is about cost: the resolver reads a table, so it is
+`stable` and would run once per row inside a `group by`; the arithmetic is
+`immutable` and a single expression, so the planner inlines it. The resolver is
+called once into a variable and the arithmetic is what goes per row.
+
+`internal.week_start_dow()` is `SECURITY DEFINER`, which is what lets
+`attendance.settings` stay unreadable to `employee` while every employee's own
+summary still groups its weeks -- the same shape as `internal.resolve_schedule()`
+and `internal.time_zone_of()`. **No row is Thursday, not an error**, the rule
+`alert_rules` already holds to. The answer carries `week_start_dow` so a screen
+can name the convention instead of inferring it from the bounds, and
+`reports_api_test.sql` moves the setting to Monday and to Sunday -- the value
+`extract(dow)` numbers both 0 and 7, which is why the arithmetic uses `isodow` --
+and checks the summary's grouping moves with the report's scope.
+
+Nothing recomputes when it changes, because no week was ever stored. It changes
+what the word refers to from the next read onwards, which the screen says out
+loud beside the control.
 
 It carries **the one judgement in the whole client's data**, and it is made in
 SQL and written down there: whether somebody met the period. `met`, `partial`,
@@ -262,8 +325,9 @@ that is over, or a Tuesday reports three days of the calendar as a deficit. The
 reasons come back as codes with counts, never as sentences, so the wording stays
 in the screen.
 
-**A report is only about people who can punch.** Of the 31 on the roster, the
-ones without an account have no way to clock in, so a period cannot report them
+**A report is only about people who can punch.** Of the thirty-two on the
+roster, the twenty-three without an account have no way to clock in, so a period
+cannot report them
 as absent from it -- there was never anything to be absent from. That is the
 population `attendance.evaluate_alerts()` already watches, in its own words:
 somebody who cannot punch cannot be late. Keeping the two identical is the
@@ -307,10 +371,18 @@ reader cannot tell which of the six a press will change.
 
 **The administration screen** (`web/src/features/admin/`) is the one place in
 the client where somebody types, and it is why `attendance.schedules`,
-`attendance.alert_rules`, `public.user_roles` and now `public.empleados` are no
-longer edited in the SQL editor. Its first tab is the roster, because that is
-where the sequence starts: somebody is added, then given access, then covered by
-a schedule.
+`attendance.alert_rules`, `public.user_roles`, `public.empleados` and now
+`attendance.settings` are no longer edited in the SQL editor. Its first tab is
+the roster, because that is where the sequence starts: somebody is added, then
+given access, then covered by a schedule.
+
+**Periodos is the fifth tab and holds one control**, the day a week begins on.
+It names the span -- "De jueves a miércoles" -- and computes no dates on purpose:
+a preview of a real week would put a week boundary in the browser, which is the
+one arithmetic this feature exists to keep in a single place, and a preview a day
+out from the report would be worse than none. It also says what saving changes,
+beside the control, because the answer is "a meaning on every screen at once"
+rather than a stored number.
 
 **Nothing on it is called deleting, because nothing deletes.** "Dar de baja"
 sets `estado = 'baja'` and unlinks the account. A real `DELETE` has exactly two
@@ -604,9 +676,15 @@ ignored globally and never appears in `git status`.
    `heartbeat()`, `open_session()`, `touch_session()`, `close_session()`,
    `my_day()`, `my_history()`, `my_summary()`, `my_sessions()`, `team_day()`,
    `open_alerts()`, `employee_sessions()`, `attendance_report()`,
-   `employee_dossier()`, `employee_session_events()` and
-   `report_session_event()` -- plus the review and administration functions HR
-   reaches.
+   `employee_dossier()`, `employee_session_events()`,
+   `report_session_event()`, `attendance_settings()` and `save_settings()` --
+   plus the review and administration functions HR reaches.
+
+   `security_invariants_test.sql` names that whole list and asserts the security
+   mode of every entry, so a read added as `DEFINER` fails locally until somebody
+   writes down why. It had drifted -- four reads and one writer added since it was
+   written were absent, and an absent name is a name the invariant does not check
+   -- so it is complete again.
 
    The advisors flag `punch`, `sync_punches`, `heartbeat`, the three session
    writers and `report_session_event` as "SECURITY DEFINER executable by
@@ -854,7 +932,8 @@ select tablename, policyname, cmd from pg_policies
 - **`empleados.departamento` (text)** is obsolete: it exists only so the help
   desk keeps working. A trigger keeps it in sync with `department_id`. It goes
   away when `ti-hub` uses the id.
-- **8 of 31 employees have no department.** The global schedule covers them.
+- **8 of 32 active employees have no department.** The global schedule covers
+  them.
 - **Spanish aliases inside 20 production policies**, reading as
   `(SELECT internal.caller_role() AS rol_actual)`: Postgres froze the output
   alias when the policy was created. The call resolves correctly and behavior is
@@ -870,10 +949,10 @@ select tablename, policyname, cmd from pg_policies
   it is called and no cron job calls it. Scheduling means deciding where the
   function URL and its key live for `pg_net` to use, which is a credential
   decision and so its own change.
-- **The 31 user accounts still have to be created**, one at a time, on
-  **Configuración → Accesos**. The agreement was to start with 2 or 3. Until an
-  account exists a person cannot punch, and `evaluate_alerts()` does not look at
-  them -- so onboarding somebody is also what puts them under watch.
+- **9 of 32 accounts exist**, created one at a time on **Configuración →
+  Accesos**. Until an account exists a person cannot punch, `evaluate_alerts()`
+  does not look at them, and neither the report nor the Equipo board counts them
+  -- so onboarding somebody is also what puts them under watch and on the board.
 - **The access log records where by IP, not by coordinates.** Turning on real
   geolocation means a consent screen, a row in `attendance.consents`, and
   changing `Permissions-Policy` in `web/vercel.json` in the same commit. The

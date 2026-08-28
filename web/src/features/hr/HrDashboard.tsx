@@ -35,7 +35,9 @@ import {
   entryHistogram,
   filterAlerts,
   filterTeam,
+  punchable,
   summarise,
+  withoutAccount,
 } from './summary';
 import { useEmployeeDay } from './useEmployeeDay';
 import { useOpenAlerts } from './useOpenAlerts';
@@ -83,6 +85,7 @@ export function HrDashboard({
   const [homeOfficeOnly, setHomeOfficeOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [countableOnly, setCountableOnly] = useState(true);
+  const [showWithoutAccount, setShowWithoutAccount] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [reviewing, setReviewing] = useState<string | null>(null);
   const [reportScope, setReportScope] = useState<ReportScope>('week');
@@ -110,17 +113,31 @@ export function HrDashboard({
   const shownDate = date ?? team[0]?.work_date ?? isoDateIn(new Date(), timeZone);
   const isToday = shownDate === isoDateIn(new Date(), timeZone);
 
-  const summary = useMemo(() => summarise(team), [team]);
-  const departments = useMemo(() => departmentsOf(team), [team]);
+  /**
+   * The board is about the people who can punch.
+   *
+   * `team_day()` deliberately still returns everybody -- Expedientes and
+   * Revisión read the same list and neither asked to lose the twenty-three
+   * people without an account -- so the narrowing happens here, on this screen
+   * only, and `noAccess` keeps the count of what stepped aside.
+   */
+  const boardTeam = useMemo(
+    () => (showWithoutAccount ? [...team] : punchable(team)),
+    [team, showWithoutAccount],
+  );
+  const noAccess = useMemo(() => withoutAccount(team), [team]);
+
+  const summary = useMemo(() => summarise(boardTeam), [boardTeam]);
+  const departments = useMemo(() => departmentsOf(boardTeam), [boardTeam]);
 
   const arrivals = useMemo(
-    () => cumulativeArrivals(entryHistogram(team, timeZone)),
-    [team, timeZone],
+    () => cumulativeArrivals(entryHistogram(boardTeam, timeZone)),
+    [boardTeam, timeZone],
   );
 
   const visible = useMemo(
-    () => filterTeam(team, { query, state, department, homeOfficeOnly }),
-    [team, query, state, department, homeOfficeOnly],
+    () => filterTeam(boardTeam, { query, state, department, homeOfficeOnly }),
+    [boardTeam, query, state, department, homeOfficeOnly],
   );
 
   /**
@@ -456,7 +473,7 @@ export function HrDashboard({
                     </li>
                     <li>
                       <span className="swatch swatch--soft" />
-                      Plantilla activa ({summary.total})
+                      {showWithoutAccount ? 'Plantilla activa' : 'Con acceso'} ({summary.total})
                     </li>
                   </ul>
                 </div>
@@ -487,6 +504,16 @@ export function HrDashboard({
                     >
                       Solo Home Office
                     </button>
+                    {(noAccess > 0 || showWithoutAccount) && (
+                      <button
+                        className={showWithoutAccount ? 'btn btn--on' : 'btn'}
+                        type="button"
+                        aria-pressed={showWithoutAccount}
+                        onClick={() => setShowWithoutAccount((shown) => !shown)}
+                      >
+                        Incluir sin cuenta
+                      </button>
+                    )}
                     <label>
                       <span className="sr-only">Filtrar por departamento</span>
                       <select
@@ -509,6 +536,19 @@ export function HrDashboard({
                     )}
                   </div>
                 </div>
+
+                {noAccess > 0 && (
+                  /* The node stays mounted while the toggle moves -- only its
+                   * text changes -- so the announcement actually fires. */
+                  <p className="note" role="status" aria-live="polite">
+                    {showWithoutAccount
+                      ? `Incluyendo ${plural(noAccess, 'persona sin cuenta', 'personas sin cuenta')}. ` +
+                        'Sin cuenta no hay forma de marcar, así que su jornada aparece sin empezar todo el día.'
+                      : `${plural(noAccess, 'persona', 'personas')} sin cuenta no ` +
+                        `${noAccess === 1 ? 'aparece' : 'aparecen'} aquí: sin acceso no hay forma de marcar. ` +
+                        'Se crean en Configuración → Accesos.'}
+                  </p>
+                )}
 
                 <TeamBoard
                   team={visible}

@@ -128,6 +128,13 @@ export function PersonDossier({
                   <span className="dossier__person-name">{member.employee_name}</span>
                   <span className="dossier__person-dept">
                     {member.department ?? 'Sin departamento'}
+                    {/* Marked, not hidden. The board leaves these twenty-three
+                      * out because it is about a day being worked; this page is
+                      * about what the record holds, and "no account, therefore
+                      * nothing" is an answer somebody comes here to get. Only a
+                      * definite false marks: the key is absent until the
+                      * migration lands. */}
+                    {member.has_account === false && ' · sin cuenta'}
                   </span>
                 </button>
               </li>

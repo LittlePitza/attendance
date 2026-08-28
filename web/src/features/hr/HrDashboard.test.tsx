@@ -579,4 +579,77 @@ describe('HrDashboard', () => {
     expect(screen.queryByRole('button', { name: 'Día anterior' })).not.toBeInTheDocument();
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
   });
+
+  it('leaves out the people who have no way to punch, and says how many', async () => {
+    teamDay.mockResolvedValue([
+      member({ employee_id: '1', has_account: true }),
+      member({ employee_id: '2', employee_name: 'Beto Lara', has_account: false }),
+      member({ employee_id: '3', employee_name: 'Carla Sosa', has_account: false }),
+    ]);
+    show();
+
+    expect(await screen.findByText('Ana Ruiz')).toBeInTheDocument();
+    expect(screen.queryByText('Beto Lara')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '1 persona' })).toBeInTheDocument();
+
+    // Counted where they were hidden. Twenty-three people vanishing with no
+    // trace is how a roster of thirty-two silently becomes nine.
+    expect(screen.getByText(/2 personas sin cuenta no aparecen/)).toBeInTheDocument();
+  });
+
+  it('brings them back on one press', async () => {
+    teamDay.mockResolvedValue([
+      member({ employee_id: '1', has_account: true }),
+      member({ employee_id: '2', employee_name: 'Beto Lara', has_account: false }),
+    ]);
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Incluir sin cuenta' }));
+
+    expect(screen.getByText('Beto Lara')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '2 personas' })).toBeInTheDocument();
+  });
+
+  it('says nothing about accounts when everybody has one', async () => {
+    teamDay.mockResolvedValue([
+      member({ employee_id: '1', has_account: true }),
+      member({ employee_id: '2', employee_name: 'Beto Lara', has_account: true }),
+    ]);
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    expect(screen.queryByText(/sin cuenta/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Incluir sin cuenta' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not empty itself while a migration is behind the bundle', async () => {
+    // No `has_account` at all: the shape `team_day()` returns until the
+    // migration lands. Comparing to `true` here would have blanked the board
+    // for everybody in that window.
+    show();
+
+    expect(await screen.findByText('Ana Ruiz')).toBeInTheDocument();
+    expect(screen.getByText('Beto Lara')).toBeInTheDocument();
+    expect(screen.getByText('Carla Sosa')).toBeInTheDocument();
+    expect(screen.queryByText(/sin cuenta/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the whole roster on the screens that are not about a day', async () => {
+    teamDay.mockResolvedValue([
+      member({ employee_id: '1', has_account: true }),
+      member({ employee_id: '2', employee_name: 'Beto Lara', has_account: false }),
+    ]);
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    // Expedientes is about what the record holds for one person, and "no
+    // account, therefore nothing" is an answer somebody opens it to get.
+    await userEvent.click(navLink(/Expedientes/));
+
+    expect(await screen.findByRole('button', { name: /Beto Lara/ })).toBeInTheDocument();
+    expect(screen.getByText(/sin cuenta/)).toBeInTheDocument();
+  });
 });

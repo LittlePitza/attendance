@@ -9,7 +9,9 @@ import {
   entryHistogram,
   filterAlerts,
   filterTeam,
+  punchable,
   summarise,
+  withoutAccount,
 } from './summary';
 
 const ZONE = 'America/Mexico_City';
@@ -322,5 +324,39 @@ describe('filterAlerts', () => {
 
   it('returns everything when nothing was typed', () => {
     expect(filterAlerts(alerts, '   ')).toHaveLength(2);
+  });
+});
+
+describe('who the board is about', () => {
+  it('keeps the people who have an account', () => {
+    const team = [
+      member({ employee_id: '1', has_account: true }),
+      member({ employee_id: '2', has_account: false }),
+      member({ employee_id: '3', has_account: true }),
+    ];
+
+    expect(punchable(team).map((m) => m.employee_id)).toEqual(['1', '3']);
+    expect(withoutAccount(team)).toBe(1);
+  });
+
+  it('shows everybody while the migration is behind the bundle', () => {
+    // The key is simply absent between a deploy and its migration. Testing for
+    // `=== true` would have emptied the board for those minutes; `!== false`
+    // leaves it exactly as it was before the feature shipped.
+    const team = [member({ employee_id: '1' }), member({ employee_id: '2' })];
+
+    expect(punchable(team)).toHaveLength(2);
+    // And it claims nobody is hidden, because it cannot tell that yet.
+    expect(withoutAccount(team)).toBe(0);
+  });
+
+  it('counts nothing hidden when everybody can punch', () => {
+    const team = [
+      member({ employee_id: '1', has_account: true }),
+      member({ employee_id: '2', has_account: true }),
+    ];
+
+    expect(withoutAccount(team)).toBe(0);
+    expect(punchable(team)).toHaveLength(2);
   });
 });

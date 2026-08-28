@@ -100,7 +100,12 @@ begin
                          'team_day', 'open_alerts', 'employee_day',
                          'employee_sessions', 'employee_summary',
                          'list_departments', 'list_schedules', 'list_alert_rules',
-                         'list_employees')
+                         'list_employees',
+                         -- The four reads added since this list was written. It
+                         -- is only an invariant while it is complete: a read
+                         -- that elevates and is not named here would pass.
+                         'attendance_report', 'employee_dossier',
+                         'employee_session_events', 'attendance_settings')
            and p.prosecdef)
        or (p.proname in ('punch', 'sync_punches', 'heartbeat',
                          'review_punch', 'decide_alert',
@@ -109,7 +114,8 @@ begin
                          'link_employee_account', 'set_account_role',
                          'unlink_employee_account', 'record_password_reset',
                          'reset_day', 'save_employee',
-                         'retire_employee', 'restore_employee')
+                         'retire_employee', 'restore_employee',
+                         'report_session_event', 'save_settings')
            and not p.prosecdef)
      );
 

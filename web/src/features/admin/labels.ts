@@ -42,6 +42,30 @@ export const WEEKDAYS: readonly { readonly iso: number; readonly short: string; 
 ];
 
 /**
+ * `De jueves a miércoles`, from the ISO day a week begins on.
+ *
+ * It names the convention and deliberately computes no dates. A preview of a
+ * real week would mean this file deriving a week boundary, which is the one
+ * arithmetic the whole feature exists to keep in a single place -- and a preview
+ * that disagreed with the report by a day would be worse than no preview. Both
+ * ends come from `WEEKDAYS`, so the wording cannot drift from the list the
+ * selector is built from either.
+ */
+export function describeWeekSpan(startDow: number): string {
+  const start = WEEKDAYS.find((day) => day.iso === startDow);
+
+  if (start === undefined) {
+    return 'Semana completa';
+  }
+
+  // Six days on: the last day of a week that begins on `startDow`.
+  const endIso = ((startDow + 5) % 7) + 1;
+  const end = WEEKDAYS.find((day) => day.iso === endIso);
+
+  return end === undefined ? 'Semana completa' : `De ${start.long} a ${end.long}`;
+}
+
+/**
  * What the threshold on each rule counts, because the number means something
  * different in every row and a bare "minutos" would be misleading.
  */
@@ -134,8 +158,10 @@ export function formatDay(iso: string): string {
 }
 
 /**
- * `Semana del 24 ago`. The week starts on a Monday because Postgres grouped it
- * that way, in the employee's zone -- not because this file decided so.
+ * `Semana del 27 ago`. Which day that is comes from the grouping Postgres did,
+ * in the employee's zone and from `internal.week_start_dow()` -- Thursday by
+ * default, and whatever **Configuración → Periodos** says after that. This file
+ * formats the date it was handed and decides nothing about where a week begins.
  *
  * Formatted rather than trimmed out of `formatDay`: how a locale spells a date
  * is the locale's business, and a regular expression that strips the year from

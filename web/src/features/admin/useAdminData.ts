@@ -4,6 +4,7 @@ import { describeReadFailure } from '../../lib/errors';
 import type {
   AccountRow,
   AlertRuleRow,
+  AttendanceSettings,
   DepartmentRow,
   EmployeeRow,
   ScheduleRow,
@@ -15,6 +16,12 @@ export interface AdminData {
   readonly departments: readonly DepartmentRow[];
   readonly schedules: readonly ScheduleRow[];
   readonly rules: readonly AlertRuleRow[];
+  /**
+   * Null for a caller the `settings_read` policy does not admit, and null is not
+   * an error: a manager reaching this screen sees the sections their policies
+   * allow rather than a failure they cannot act on.
+   */
+  readonly settings: AttendanceSettings | null;
   readonly error: string | null;
   readonly loading: boolean;
   readonly refresh: () => Promise<void>;
@@ -23,7 +30,7 @@ export interface AdminData {
 /**
  * The configuration, in one read.
  *
- * Five calls rather than five hooks, and no refresh loop -- deliberately, and
+ * Six calls rather than six hooks, and no refresh loop -- deliberately, and
  * for the opposite reasons to `useTeamDay`. Configuration changes when somebody
  * on this screen changes it, so a timer would only ever reload what the reader
  * just wrote, and would do it underneath a half-filled form. It reloads when
@@ -42,25 +49,34 @@ export function useAdminData(): AdminData {
   const [departments, setDepartments] = useState<readonly DepartmentRow[]>([]);
   const [schedules, setSchedules] = useState<readonly ScheduleRow[]>([]);
   const [rules, setRules] = useState<readonly AlertRuleRow[]>([]);
+  const [settings, setSettings] = useState<AttendanceSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
-      const [nextAccounts, nextEmployees, nextDepartments, nextSchedules, nextRules] =
-        await Promise.all([
-          api.listAccounts(),
-          api.listEmployees(),
-          api.listDepartments(),
-          api.listSchedules(),
-          api.listAlertRules(),
-        ]);
+      const [
+        nextAccounts,
+        nextEmployees,
+        nextDepartments,
+        nextSchedules,
+        nextRules,
+        nextSettings,
+      ] = await Promise.all([
+        api.listAccounts(),
+        api.listEmployees(),
+        api.listDepartments(),
+        api.listSchedules(),
+        api.listAlertRules(),
+        api.attendanceSettings(),
+      ]);
 
       setAccounts(nextAccounts);
       setEmployees(nextEmployees);
       setDepartments(nextDepartments);
       setSchedules(nextSchedules);
       setRules(nextRules);
+      setSettings(nextSettings);
       setError(null);
     } catch (failure) {
       // Reported, never re-thrown: this runs in a detached promise, and an error
@@ -76,5 +92,15 @@ export function useAdminData(): AdminData {
     void refresh();
   }, [refresh]);
 
-  return { accounts, employees, departments, schedules, rules, error, loading, refresh };
+  return {
+    accounts,
+    employees,
+    departments,
+    schedules,
+    rules,
+    settings,
+    error,
+    loading,
+    refresh,
+  };
 }

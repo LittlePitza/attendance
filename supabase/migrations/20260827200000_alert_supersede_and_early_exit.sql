@@ -85,6 +85,123 @@ select null, 'early_exit', true, 15
    select 1 from attendance.alert_rules
     where department_id is null and kind = 'early_exit');
 
+-- ========================================================= save_alert_rule ====
+-- Reissued for one line, and it is the line that would have made the whole kind
+-- unusable.
+--
+-- The list of kinds lives in three places: the CHECK on `attendance.alerts`, the
+-- CHECK on `attendance.alert_rules`, and the guard inside this function. The two
+-- CHECKs are widened above. Without this, `early_exit` would be seeded into
+-- `alert_rules`, listed on Configuración → Alertas with a threshold beside it,
+-- and refused with "Ese tipo de alerta no existe" the moment somebody pressed
+-- save -- a row that is visible, editable-looking and not editable.
+--
+-- The guard is duplication and it earns its place: the CHECK constraint would
+-- also reject the value, but as a constraint violation rather than as the
+-- Spanish sentence the person reading the screen needs. It is the reason the
+-- function validates a value the table would have caught anyway.
+
+create or replace function public.save_alert_rule(
+  p_kind              text,
+  p_active            boolean,
+  p_threshold_minutes integer,
+  p_recipients        text default null,
+  p_department_id     uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_before     attendance.alert_rules;
+  v_after      attendance.alert_rules;
+  v_recipients text;
+begin
+  perform internal.require_role(array['hr', 'admin'], 'cambiar las reglas de alerta');
+
+  if p_kind not in ('late_entry', 'missing_entry', 'break_exceeded', 'missing_exit',
+                    'early_exit', 'no_connection', 'review_offline', 'clock_tampered') then
+    raise exception 'Ese tipo de alerta no existe'
+      using errcode = '22023';
+  end if;
+
+  if p_active is null then
+    raise exception 'Falta decir si la regla esta activa'
+      using errcode = '22023';
+  end if;
+
+  if p_threshold_minutes is null or p_threshold_minutes < 0 or p_threshold_minutes > 1440 then
+    raise exception 'El umbral va de 0 a 1440 minutos'
+      using errcode = '22023';
+  end if;
+
+  if p_department_id is not null
+     and not exists (select 1 from public.departments d where d.id = p_department_id) then
+    raise exception 'Ese departamento no existe'
+      using errcode = '02000';
+  end if;
+
+  -- Empty and null mean the same thing to the dispatcher -- no addresses on the
+  -- rule -- so they are stored as the same thing. An empty string that survived
+  -- would fail `is_email_list` and refuse a form the person left blank on
+  -- purpose.
+  v_recipients := nullif(trim(coalesce(p_recipients, '')), '');
+
+  if not internal.is_email_list(v_recipients) then
+    raise exception 'Los destinatarios deben ser correos separados por coma'
+      using errcode = '22023';
+  end if;
+
+  select r.* into v_before
+    from attendance.alert_rules r
+   where r.kind = p_kind
+     and r.department_id is not distinct from p_department_id;
+
+  if p_department_id is null then
+    insert into attendance.alert_rules
+      (department_id, kind, active, threshold_minutes, recipients)
+    values (null, p_kind, p_active, p_threshold_minutes, v_recipients)
+    on conflict (kind) where department_id is null
+      do update set active            = excluded.active,
+                    threshold_minutes = excluded.threshold_minutes,
+                    recipients        = excluded.recipients
+    returning * into v_after;
+  else
+    insert into attendance.alert_rules
+      (department_id, kind, active, threshold_minutes, recipients)
+    values (p_department_id, p_kind, p_active, p_threshold_minutes, v_recipients)
+    on conflict (department_id, kind) where department_id is not null
+      do update set active            = excluded.active,
+                    threshold_minutes = excluded.threshold_minutes,
+                    recipients        = excluded.recipients
+    returning * into v_after;
+  end if;
+
+  insert into attendance.audit_events
+    (kind, entity, entity_id, actor, body, before_data, after_data)
+  values
+    ('alert_rule_saved', 'attendance.alert_rules', v_after.id, auth.uid(),
+     format('%s (%s)', v_after.kind,
+            coalesce((select d.name from public.departments d where d.id = v_after.department_id),
+                     'toda la empresa')),
+     case when v_before.id is null then null else to_jsonb(v_before) end,
+     to_jsonb(v_after));
+
+  return jsonb_build_object(
+    'rule_id',  v_after.id,
+    'kind',     v_after.kind,
+    'active',   v_after.active,
+    'created',  v_before.id is null);
+end;
+$fn$;
+
+comment on function public.save_alert_rule(text, boolean, integer, text, uuid) is
+  'Creates or updates one alert rule, including the addresses the dispatcher sends to. Never deletes: an absent rule means "use the default threshold", not "disabled".';
+
+revoke all     on function public.save_alert_rule(text, boolean, integer, text, uuid) from public, anon;
+grant  execute on function public.save_alert_rule(text, boolean, integer, text, uuid) to authenticated;
+
 -- ======================================================== evaluate_alerts ====
 -- Reissued for three changes, and a body cannot be patched:
 --

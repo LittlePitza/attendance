@@ -6,6 +6,7 @@ import type {
   AccountRow,
   AlertRuleRow,
   AppSession,
+  AttendanceSettings,
   DepartmentRow,
   EmployeeRow,
   EmployeeSummary,
@@ -17,6 +18,8 @@ const listAccounts = vi.fn<() => Promise<AccountRow[]>>();
 const listDepartments = vi.fn<() => Promise<DepartmentRow[]>>();
 const listSchedules = vi.fn<() => Promise<ScheduleRow[]>>();
 const listAlertRules = vi.fn<() => Promise<AlertRuleRow[]>>();
+const attendanceSettings = vi.fn<() => Promise<AttendanceSettings | null>>();
+const saveSettings = vi.fn<(dow: number) => Promise<AttendanceSettings>>();
 const createAccount = vi.fn<(id: string, role: string) => Promise<unknown>>();
 const setAccountRole = vi.fn<(id: string, role: string, reason: string) => Promise<unknown>>();
 const revokeAccount = vi.fn<(id: string, reason: string) => Promise<unknown>>();
@@ -36,6 +39,8 @@ vi.mock('../../lib/api', () => ({
     listDepartments: () => listDepartments(),
     listSchedules: () => listSchedules(),
     listAlertRules: () => listAlertRules(),
+    attendanceSettings: () => attendanceSettings(),
+    saveSettings: (dow: number) => saveSettings(dow),
     createAccount: (id: string, role: string) => createAccount(id, role),
     setAccountRole: (id: string, role: string, reason: string) => setAccountRole(id, role, reason),
     revokeAccount: (id: string, reason: string) => revokeAccount(id, reason),
@@ -180,6 +185,16 @@ beforeEach(() => {
   ]);
   employeeSummary.mockResolvedValue(summary());
   employeeSessions.mockResolvedValue([]);
+  attendanceSettings.mockResolvedValue({
+    week_start_dow: 4,
+    updated_at: '2026-08-28T15:00:00Z',
+    default_week_start_dow: 4,
+  });
+  saveSettings.mockResolvedValue({
+    week_start_dow: 1,
+    updated_at: '2026-08-28T16:00:00Z',
+    default_week_start_dow: 4,
+  });
 });
 
 it('the access tab opens on who cannot sign in, because that is the question it answers', async () => {
@@ -486,4 +501,109 @@ it("prints the database sentence when an address already belongs to somebody", a
   await userEvent.click(screen.getByRole('button', { name: 'Agregar persona' }));
 
   expect(await screen.findByText('Ese correo ya es de Beto Lara')).toBeInTheDocument();
+});
+
+async function openPeriods(): Promise<void> {
+  await userEvent.click(await screen.findByRole('tab', { name: 'Periodos' }));
+}
+
+it('names the week the company actually works, not the ISO one', async () => {
+  render(<AdminPanel />);
+  await openPeriods();
+
+  // Thursday to Wednesday, which no date library and no Postgres builtin knows.
+  expect(await screen.findByText('De jueves a miércoles')).toBeInTheDocument();
+});
+
+it('says what moving the week start changes, before it is moved', async () => {
+  render(<AdminPanel />);
+  await openPeriods();
+  await screen.findByText('De jueves a miércoles');
+
+  // The blast radius is on screen beside the control rather than left to be
+  // discovered: it changes a meaning on every screen at once.
+  expect(screen.getByText(/Cambia lo que significa/)).toBeInTheDocument();
+  expect(screen.getByText(/No mueve ningún dato/)).toBeInTheDocument();
+});
+
+it('will not save a day that was never chosen', async () => {
+  render(<AdminPanel />);
+  await openPeriods();
+  await screen.findByText('De jueves a miércoles');
+
+  expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled();
+});
+
+it('sends the ISO day the database expects', async () => {
+  render(<AdminPanel />);
+  await openPeriods();
+  await screen.findByText('De jueves a miércoles');
+
+  await userEvent.selectOptions(screen.getByLabelText('Primer día'), '1');
+  await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+  // 1 is Monday in ISO, which is what `save_settings` validates against.
+  await waitFor(() => expect(saveSettings).toHaveBeenCalledWith(1));
+});
+
+it('previews the chosen span without computing a single date', async () => {
+  render(<AdminPanel />);
+  await openPeriods();
+  await screen.findByText('De jueves a miércoles');
+
+  await userEvent.selectOptions(screen.getByLabelText('Primer día'), '7');
+
+  // Sunday to Saturday. A real week's dates would be this file deriving a week
+  // boundary, which is the one arithmetic the feature keeps in a single place.
+  expect(screen.getByText(/De domingo a sábado/)).toBeInTheDocument();
+});
+
+it('prints the database sentence when the day is refused', async () => {
+  saveSettings.mockRejectedValue(
+    new RpcError('El dia de inicio de semana va de 1 (lunes) a 7 (domingo)'),
+  );
+
+  render(<AdminPanel />);
+  await openPeriods();
+  await screen.findByText('De jueves a miércoles');
+
+  await userEvent.selectOptions(screen.getByLabelText('Primer día'), '2');
+  await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+  expect(
+    await screen.findByText('El dia de inicio de semana va de 1 (lunes) a 7 (domingo)'),
+  ).toBeInTheDocument();
+});
+
+it('confirms the save even when the reload has not caught up yet', async () => {
+  // The reload keeps answering Thursday: a slow read, or one that failed on its
+  // own. The write still succeeded, and a screen that stays silent about it
+  // invites somebody to press Guardar a second time.
+  attendanceSettings.mockResolvedValue({
+    week_start_dow: 4,
+    updated_at: '2026-08-28T15:00:00Z',
+    default_week_start_dow: 4,
+  });
+
+  render(<AdminPanel />);
+  await openPeriods();
+  await screen.findByText('De jueves a miércoles');
+
+  await userEvent.selectOptions(screen.getByLabelText('Primer día'), '1');
+  await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+  await waitFor(() => expect(saveSettings).toHaveBeenCalledWith(1));
+  expect(await screen.findByText(/Guardado/)).toBeInTheDocument();
+});
+
+it('says so rather than showing an empty control when the policy withholds it', async () => {
+  // `settings_read` admits hr and admin. A manager reaching this tab gets null,
+  // which is the policy working -- not a failure they can act on.
+  attendanceSettings.mockResolvedValue(null);
+
+  render(<AdminPanel />);
+  await openPeriods();
+
+  expect(await screen.findByText(/solo la puede ver Recursos Humanos/)).toBeInTheDocument();
+  expect(screen.queryByLabelText('Primer día')).not.toBeInTheDocument();
 });

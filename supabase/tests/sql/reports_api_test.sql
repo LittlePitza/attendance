@@ -50,9 +50,12 @@
 --      definition both build on, and the whole point of the refactor that
 --      introduced it was that a report re-deriving these figures would disagree
 --      with `employee_summary()` invisibly. So the two are compared directly.
---   2. **A week starts on Monday and a month on the 1st**, whatever day inside
---      it the report is anchored at. "This week" has a wrong answer available
---      and the browser is where it would be given.
+--   2. **A week starts on the configured day and a month on the 1st**, whatever
+--      day inside it the report is anchored at. "This week" has a wrong answer
+--      available and the browser is where it would be given. The day is
+--      `internal.week_start_dow()` -- Thursday unless somebody changed it -- so
+--      the assertions below read it rather than assuming Monday, and PHASE H
+--      moves it and checks the bounds move with it.
 --   3. **`met` is never awarded on no evidence.** A period whose scheduled days
 --      are all still to come is `pending`, because certifying a week nobody has
 --      worked yet is the failure mode a compliance figure actually has.
@@ -102,7 +105,8 @@ declare
   v_count   integer;
   v_text    text;
   v_ok      boolean;
-  v_monday  date;
+  v_week_start date;
+  v_week_dow   smallint;
 begin
   select id into v_dept from public.departments order by name limit 1;
 
@@ -211,31 +215,50 @@ begin
   v_report := public.attendance_report('week', v_today);
   perform set_config('role', 'postgres', true);
 
-  v_monday := date_trunc('week', v_today)::date;
+  -- Read, not assumed. The fixture leaves the seeded default in place, and the
+  -- point of the assertion is that the report agrees with the setting whatever
+  -- it says -- not that the setting happens to be 4 today.
+  v_week_dow   := internal.week_start_dow();
+  v_week_start := internal.week_start(v_today, v_week_dow);
 
   insert into test_results(name, expected, got, passed) values
-    ('a week starts on the Monday of the anchor', v_monday::text,
+    ('the default week begins on Thursday', '4', v_week_dow::text, v_week_dow = 4);
+
+  insert into test_results(name, expected, got, passed) values
+    ('a week starts on the configured day of the anchor', v_week_start::text,
      coalesce(v_report ->> 'from', 'null'),
-     (v_report ->> 'from')::date = v_monday);
+     (v_report ->> 'from')::date = v_week_start);
+
+  insert into test_results(name, expected, got, passed) values
+    ('the week the report returns begins on that ISO day', v_week_dow::text,
+     coalesce(extract(isodow from (v_report ->> 'from')::date)::text, 'null'),
+     extract(isodow from (v_report ->> 'from')::date) = v_week_dow);
 
   insert into test_results(name, expected, got, passed) values
     ('a week is seven days long', '7',
      coalesce(v_report ->> 'days', 'null'), (v_report ->> 'days')::integer = 7);
 
+  -- The convention rides along with the answer, so a screen can name it rather
+  -- than infer it from the bounds.
+  insert into test_results(name, expected, got, passed) values
+    ('the report carries the convention that produced it', v_week_dow::text,
+     coalesce(v_report ->> 'week_start_dow', 'null'),
+     (v_report ->> 'week_start_dow')::smallint = v_week_dow);
+
   -- Anchored at every day of the same week, the bounds must not move. This is
   -- the assertion that would fail if the period were ever resolved in the
-  -- browser's zone or with a Sunday-start week.
+  -- browser's zone, or with the week starting somewhere else.
   perform set_config('role', 'authenticated', true);
   perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
   select count(distinct r.value)::integer into v_count
-    from generate_series(v_monday, v_monday + 6, interval '1 day') as d
+    from generate_series(v_week_start, v_week_start + 6, interval '1 day') as d
     cross join lateral (
       select public.attendance_report('week', d::date) ->> 'from' as value
     ) r;
   perform set_config('role', 'postgres', true);
 
   insert into test_results(name, expected, got, passed) values
-    ('every day of a week reports the same Monday', '1', v_count::text, v_count = 1);
+    ('every day of a week reports the same first day', '1', v_count::text, v_count = 1);
 
   perform set_config('role', 'authenticated', true);
   perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
@@ -660,6 +683,124 @@ begin
 
   insert into test_results(name, expected, got, passed) values
     ('the dossier invokes', '0', v_count::text, v_count = 0);
+
+  -- ============================================ PHASE H: the week is a setting ===
+  -- The whole reason `attendance.settings` exists. Everything above asserts the
+  -- report agrees with the configured day; this asserts the day is genuinely
+  -- configurable, that the default survives its row being gone, and that the
+  -- summary's weekly grouping moves with it -- because a report on a Thursday
+  -- week beside a box grouping Monday weeks is the drift this feature was built
+  -- to prevent.
+
+  insert into test_results(name, expected, got, passed) values
+    ('Thursday is the seeded default', '4',
+     (select week_start_dow::text from attendance.settings),
+     (select week_start_dow from attendance.settings) = 4);
+
+  -- Monday, so the assertion cannot pass by accident on a Thursday run.
+  update attendance.settings set week_start_dow = 1 where id;
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
+  v_report := public.attendance_report('week', v_today);
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('moving the setting moves the week', '1',
+     coalesce(extract(isodow from (v_report ->> 'from')::date)::text, 'null'),
+     extract(isodow from (v_report ->> 'from')::date) = 1);
+
+  insert into test_results(name, expected, got, passed) values
+    ('and the answer says which convention it used', '1',
+     coalesce(v_report ->> 'week_start_dow', 'null'),
+     (v_report ->> 'week_start_dow')::smallint = 1);
+
+  -- Sunday: the value `extract(dow)` numbers both 0 and 7, which is the reason
+  -- the arithmetic uses isodow. A week starting Sunday must start on Sunday.
+  update attendance.settings set week_start_dow = 7 where id;
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
+  v_report := public.attendance_report('week', v_today);
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('a week may begin on Sunday, which dow numbers twice', '7',
+     coalesce(extract(isodow from (v_report ->> 'from')::date)::text, 'null'),
+     extract(isodow from (v_report ->> 'from')::date) = 7);
+
+  -- The summary groups by the same setting. Compared against the resolver rather
+  -- than against 7, so this asserts they agree rather than re-asserting the
+  -- value.
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
+  select count(*)::integer into v_count
+    from jsonb_array_elements(public.employee_summary(v_met, 30) -> 'weeks') as w
+   where extract(isodow from (w.value ->> 'week_start')::date) <> internal.week_start_dow();
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('the summary groups weeks the same way the report scopes them', '0',
+     v_count::text, v_count = 0);
+
+  -- No row is the default, not an error and not null. The same rule alert_rules
+  -- holds to: absent configuration never switches a behaviour off.
+  delete from attendance.settings;
+
+  insert into test_results(name, expected, got, passed) values
+    ('an empty settings table reports Thursday', '4',
+     internal.week_start_dow()::text, internal.week_start_dow() = 4);
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid_hr)::text, true);
+  v_report := public.attendance_report('week', v_today);
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('and the report still resolves a week from it', '4',
+     coalesce(extract(isodow from (v_report ->> 'from')::date)::text, 'null'),
+     extract(isodow from (v_report ->> 'from')::date) = 4);
+
+  -- The arithmetic itself, on fixed dates, so a failure points at the formula
+  -- rather than at whatever day the suite ran on. 2026-08-27 is a Thursday.
+  insert into test_results(name, expected, got, passed) values
+    ('the start day resolves to itself', '2026-08-27',
+     internal.week_start(date '2026-08-27', 4::smallint)::text,
+     internal.week_start(date '2026-08-27', 4::smallint) = date '2026-08-27');
+
+  insert into test_results(name, expected, got, passed) values
+    ('the day after belongs to the same week', '2026-08-27',
+     internal.week_start(date '2026-08-28', 4::smallint)::text,
+     internal.week_start(date '2026-08-28', 4::smallint) = date '2026-08-27');
+
+  insert into test_results(name, expected, got, passed) values
+    ('the day before belongs to the previous one', '2026-08-20',
+     internal.week_start(date '2026-08-26', 4::smallint)::text,
+     internal.week_start(date '2026-08-26', 4::smallint) = date '2026-08-20');
+
+  -- The formula, pinned by its two defining properties over a fortnight and all
+  -- seven settings -- which is what stops it being right only for Thursday.
+  --
+  -- First: the week a day belongs to begins on the day that was asked for.
+  select count(*)::integer into v_count
+    from generate_series(1, 7) as g
+    cross join generate_series(date '2026-08-27', date '2026-09-09', interval '1 day') as d
+   where extract(isodow from internal.week_start(d::date, g::smallint)) <> g;
+
+  insert into test_results(name, expected, got, passed) values
+    ('every resolved week begins on the day it was asked for', '0',
+     v_count::text, v_count = 0);
+
+  -- Second: it is the *most recent* such day, never the next one and never one
+  -- a fortnight back. Together with the above that leaves exactly one possible
+  -- answer per day, which is the whole of the arithmetic.
+  select count(*)::integer into v_count
+    from generate_series(1, 7) as g
+    cross join generate_series(date '2026-08-27', date '2026-09-09', interval '1 day') as d
+   where (d::date - internal.week_start(d::date, g::smallint)) not between 0 and 6;
+
+  insert into test_results(name, expected, got, passed) values
+    ('and it is the most recent one, never the next', '0', v_count::text, v_count = 0);
 
   -- ============================================================== restore ===
   update public.empleados set auth_user_id = null

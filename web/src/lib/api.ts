@@ -9,6 +9,7 @@ import type {
   AppSession,
   AssignableRole,
   AttendanceReport,
+  AttendanceSettings,
   EmployeeDossier,
   ClosableReason,
   CloseSessionResult,
@@ -264,6 +265,21 @@ export const api = {
   listSchedules: (): Promise<ScheduleRow[]> => rpc<ScheduleRow[]>('list_schedules'),
 
   listAlertRules: (): Promise<AlertRuleRow[]> => rpc<AlertRuleRow[]>('list_alert_rules'),
+
+  /**
+   * Company-wide configuration. Comes back null for a caller the settings_read
+   * policy does not admit, which is the policy working rather than a failure.
+   */
+  attendanceSettings: (): Promise<AttendanceSettings | null> =>
+    rpc<AttendanceSettings | null>('attendance_settings'),
+
+  /**
+   * Moves the day a reporting week begins on. It changes what every week-scoped
+   * report and every weekly grouping mean from the next read onwards -- nothing
+   * stored moves, because no week was ever stored.
+   */
+  saveSettings: (weekStartDow: number): Promise<AttendanceSettings> =>
+    rpc<AttendanceSettings>('save_settings', { p_week_start_dow: weekStartDow }),
 
   /**
    * Creates or edits a schedule. The database refuses a second live schedule for

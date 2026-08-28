@@ -210,6 +210,13 @@ export interface TeamMember {
   readonly needs_review: boolean;
   readonly entry_expected: string | null;
   readonly exit_expected: string | null;
+  /**
+   * Whether this person has an account, and so whether they could have punched
+   * at all. Optional because a bundle and a migration never deploy together:
+   * until `team_day()` reports it the key is simply absent, and the board must
+   * not read that as "nobody can punch" and empty itself.
+   */
+  readonly has_account?: boolean;
 }
 
 export interface OpenAlert {
@@ -408,6 +415,20 @@ export interface AlertRuleRow {
 
 export interface SaveResult {
   readonly created: boolean;
+}
+
+/**
+ * Company-wide configuration. One row in the database, so one object here.
+ *
+ * `week_start_dow` is an ISO day of week: 1 = Monday .. 7 = Sunday. The
+ * database's own fallback rides along in `default_week_start_dow` so the screen
+ * can say what would apply if the row were gone, rather than hardcoding a number
+ * that would then exist in two places.
+ */
+export interface AttendanceSettings {
+  readonly week_start_dow: number;
+  readonly updated_at: string | null;
+  readonly default_week_start_dow: number;
 }
 
 /**
@@ -792,6 +813,12 @@ export interface AttendanceReport {
   readonly days: number;
   /** The period has finished. A week still running is not a week anybody failed. */
   readonly closed: boolean;
+  /**
+   * The ISO day a week begins on, 1 = Monday .. 7 = Sunday, as configured. Sent
+   * whatever the scope so the screen can name the convention instead of leaving
+   * a reader to infer it from the bounds. Optional for the deploy window.
+   */
+  readonly week_start_dow?: number;
   readonly totals: ReportTotals;
   readonly alerts_by_kind: readonly ReportAlertKind[];
   readonly people: readonly ReportPerson[];

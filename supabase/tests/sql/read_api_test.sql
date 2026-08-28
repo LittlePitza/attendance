@@ -273,6 +273,62 @@ begin
   insert into test_results(name, expected, got, passed) values
     ('hr sees everyone', '2', v_count::text, v_count = 2);
 
+  -- ======================================= PHASE D2: who could have punched ===
+  -- `team_day()` reports whether somebody has an account, and deliberately does
+  -- not filter on it. Three screens read this list -- the board, the Expedientes
+  -- picker and Revisión -- and only the board wants the short one, so the
+  -- narrowing is a decision about what to draw rather than about what to send.
+  -- An assertion here is what stops that being "fixed" into a where clause,
+  -- which would empty two screens nobody complained about.
+
+  update public.empleados set auth_user_id = null where id = v_emp1;
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid2)::text, true);
+  select count(*) into v_count from public.team_day();
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('somebody without an account is still returned', '2', v_count::text, v_count = 2);
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid2)::text, true);
+  select count(*) into v_count from public.team_day() t where not t.has_account;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('and is marked as unable to punch', '1', v_count::text, v_count = 1);
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid2)::text, true);
+  select count(*) into v_count from public.team_day() t where t.has_account;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('while the one with an account is marked able to', '1', v_count::text, v_count = 1);
+
+  -- Never null: the board tests for a definite false, and a null would make
+  -- somebody neither able nor unable to punch.
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid2)::text, true);
+  select count(*) into v_count from public.team_day() t where t.has_account is null;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('and never null', '0', v_count::text, v_count = 0);
+
+  -- It agrees with the population the report and the evaluator use, which is the
+  -- whole reason it is this column and not some other notion of access.
+  select count(*) into v_count
+    from public.empleados e
+   where e.estado = 'activo' and e.auth_user_id is not null;
+
+  insert into test_results(name, expected, got, passed) values
+    ('has_account is the same column evaluate_alerts() reads', '1',
+     v_count::text, v_count = 1);
+
+  update public.empleados set auth_user_id = v_uid1 where id = v_emp1;
+
   -- ================================================= PHASE E: open_alerts() ===
 
   insert into attendance.alerts (employee_id, alert_date, kind, severity)

@@ -121,6 +121,39 @@ function hourIn(isoTimestamp: string, timeZone: string): number | null {
   return Number.isFinite(hour) ? hour : null;
 }
 
+/**
+ * Whether this person could have punched at all.
+ *
+ * Thirty-two people are on the roster and nine have an account. The other
+ * twenty-three have no way to clock in, so the board showed them at
+ * `not_started` all day, every day -- rows that look like absence and are
+ * evidence of nothing. It is the same cut the report already makes: somebody who
+ * cannot punch cannot be late.
+ *
+ * **Absent is not false.** `has_account` arrives only once `team_day()` reports
+ * it, and a bundle and a migration never deploy together. Testing for `!== false`
+ * means the deploy window shows everybody -- exactly today's board -- instead of
+ * emptying the screen for the minutes in between. Comparing to `true` would have
+ * made the board read "nobody can punch" the moment it shipped.
+ */
+export function canPunch(member: TeamMember): boolean {
+  return member.has_account !== false;
+}
+
+/** The board's population: everybody who has a way in. */
+export function punchable(team: readonly TeamMember[]): TeamMember[] {
+  return team.filter(canPunch);
+}
+
+/**
+ * How many the board is not showing. Counted rather than dropped, for the same
+ * reason the hidden alert kinds are counted: twenty-three people vanishing
+ * without trace is how a roster of thirty-two silently becomes nine.
+ */
+export function withoutAccount(team: readonly TeamMember[]): number {
+  return team.filter((member) => member.has_account === false).length;
+}
+
 export interface BoardFilter {
   readonly query: string;
   readonly state: WorkdayState | 'all';
