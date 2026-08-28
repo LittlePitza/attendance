@@ -49,7 +49,7 @@ test('prepareWorkspace creates an isolated local Supabase project', async (t) =>
   assert.ok(migrations.includes('20260828155810_superseded_alerts_count_for_nothing.sql'));
   assert.ok(migrations.includes('20260828160049_configurable_week_start.sql'));
   assert.ok(migrations.includes('20260828160138_board_says_who_can_punch.sql'));
-  assert.ok(migrations.includes('20260828160230_operational_alert_thresholds.sql'));
+  assert.ok(migrations.includes('20260828174442_operational_alert_thresholds.sql'));
   assert.equal(
     await readFile(path.join(generatedSupabase, 'seed.sql'), 'utf8'),
     await readFile(path.join(repositoryRoot, 'supabase/tests/fixtures/local_seed.sql'), 'utf8'),
