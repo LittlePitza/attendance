@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, it } from 'vitest';
+import type { JSX } from 'react';
 import type { OpenAlert } from '../../../lib/types';
 import { AlertsPanel } from './AlertsPanel';
 
@@ -105,6 +106,38 @@ it('keeps the queue counts visible when a name search has no matches', () => {
   expect(screen.getByRole('button', { name: 'Todas 1' })).toBeInTheDocument();
   expect(screen.getByText('Ninguna alerta coincide con “nadie”.')).toBeInTheDocument();
   expect(screen.queryByText(/Todo el mundo dentro de su horario/)).toBeNull();
+});
+
+it('searches the name only, trimmed and case-insensitively', () => {
+  const alerts = [
+    alert({ id: 'a1', employee_name: 'Ana Ruiz', kind: 'late_entry' }),
+    alert({
+      id: 'a2',
+      employee_name: 'Beto Lara',
+      kind: 'early_exit',
+      details: { expected_at: '18:00', left_at: '17:36', minutes_early: 24 },
+    }),
+  ];
+  const panel = (query: string): JSX.Element => (
+    <AlertsPanel
+      alerts={alerts}
+      query={query}
+      timeZone="America/Mexico_City"
+      boardDate="2026-08-28"
+    />
+  );
+
+  const { rerender } = render(panel(' beto '));
+  expect(screen.getByRole('button', { name: /Salida temprana.*Beto Lara/ })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Entrada tardía.*Ana Ruiz/ })).toBeNull();
+
+  // "min" is in every detail sentence, so matching those would filter nothing.
+  rerender(panel('min'));
+  expect(screen.getByText('Ninguna alerta coincide con “min”.')).toBeInTheDocument();
+
+  rerender(panel('   '));
+  expect(screen.getByRole('button', { name: /Entrada tardía.*Ana Ruiz/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Salida temprana.*Beto Lara/ })).toBeInTheDocument();
 });
 
 it('explains the limits and recorded evidence for the other operational alerts', async () => {

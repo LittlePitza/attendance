@@ -255,25 +255,3 @@ export function operational(alerts: readonly OpenAlert[]): OpenAlert[] {
   return alerts.filter((alert) => OPERATIONAL_ALERT_KINDS.includes(alert.kind));
 }
 
-/** @deprecated Use `operational`; kept during the view migration. */
-export function countable(alerts: readonly OpenAlert[]): OpenAlert[] {
-  return operational(alerts);
-}
-
-/**
- * The same search box narrows the alert list too. Only the name is matched:
- * the kind already has its own filter in the sidebar, and matching the detail
- * sentence would make "min" pull up half the list.
- */
-export function filterAlerts(
-  alerts: readonly OpenAlert[],
-  query: string,
-  countableOnly = false,
-): OpenAlert[] {
-  const needle = query.trim().toLowerCase();
-  const scoped = countableOnly ? countable(alerts) : [...alerts];
-  if (needle === '') {
-    return scoped;
-  }
-  return scoped.filter((alert) => alert.employee_name.toLowerCase().includes(needle));
-}
