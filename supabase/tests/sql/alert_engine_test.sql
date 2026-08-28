@@ -51,7 +51,7 @@ declare
 
   d_a  date; d_b date; d_c date; d_c2 date; d_d date; d_e date;
   d_f  date; d_g date; d_h date; d_i date;  d_j date; d_k date;
-  d_l  date; d_m date; d_n date;
+  d_l  date; d_m date; d_n date; d_o date;
 begin
   select id into v_uid1 from auth.users order by created_at, id limit 1;
   select id into v_emp1 from public.empleados where estado = 'activo' order by nombre limit 1;
@@ -109,10 +109,23 @@ begin
   d_h  := (v_today - 30) - ((extract(isodow from (v_today - 30))::integer + 1) % 7);
   d_m  := v_today - 60;
   d_n  := v_today - 63;
+  d_o  := v_today - 66;
   d_i  := v_today - 45;
   d_j  := v_today - 48;
   -- The most recent Monday, where the global schedule does apply.
   d_k  := (v_today - 51) - ((extract(isodow from (v_today - 51))::integer - 1) % 7);
+
+  select string_agg(kind || '=' || threshold_minutes::text, ', ' order by kind)
+    into v_text
+    from attendance.alert_rules
+   where department_id is null
+     and kind in ('late_entry', 'break_exceeded', 'no_connection');
+
+  insert into test_results(name, expected, got, passed) values
+    ('the operational defaults match the agreed lateness break and signal policy',
+     'break_exceeded=0, late_entry=10, no_connection=20',
+     coalesce(v_text, 'missing rules'),
+     v_text = 'break_exceeded=0, late_entry=10, no_connection=20');
 
   -- ================================================ PHASE A: missing_entry ===
   -- Nobody clocked in and the entry window closed at 09:30.
@@ -198,9 +211,34 @@ begin
      v_count || ' ' || coalesce(v_text, 'none'),
      v_count = 1 and v_text = 'late_entry');
 
+  -- Five minutes past the schedule grace is still inside the alert rule's
+  -- additional ten-minute margin. A heartbeat exactly twenty minutes old also
+  -- stays inside the signal rule: both policies say "more than", not "at".
+  v_now := (d_o + time '10:00') at time zone v_zone;
+
+  insert into attendance.workdays (
+    employee_id, work_date, state, schedule_id, time_zone,
+    opened_at, last_heartbeat
+  )
+  values (
+    v_emp1, d_o, 'working', v_sched, v_zone,
+    (d_o + time '09:15') at time zone v_zone,
+    (d_o + time '09:40') at time zone v_zone
+  );
+
+  v_result := attendance.evaluate_alerts(v_now);
+
+  select count(*) into v_count from attendance.alerts
+   where employee_id = v_emp1 and alert_date = d_o
+     and kind in ('late_entry', 'no_connection');
+
+  insert into test_results(name, expected, got, passed) values
+    ('lateness and signal thresholds stay silent at their boundary', '0',
+     v_count::text, v_count = 0);
+
   -- =============================================== PHASE C: break_exceeded ===
-  -- Seventy-five minutes of break against an allowance of sixty and a
-  -- threshold of five.
+  -- Seventy-five minutes of break against an allowance of sixty and no extra
+  -- alert grace.
 
   v_now := (d_c + time '13:00') at time zone v_zone;
 
@@ -225,7 +263,8 @@ begin
               'no alert'),
      (v_details->>'break_minutes') = '75' and (v_details->>'allowed_minutes') = '60');
 
-  -- Sixty-two minutes is over the allowance but inside the threshold.
+  -- The schedule itself allows sixty minutes. Anything above it is actionable;
+  -- the alert rule adds no hidden five-minute grace of its own.
   v_now := (d_c2 + time '13:00') at time zone v_zone;
 
   insert into attendance.workdays (
@@ -244,7 +283,7 @@ begin
    where employee_id = v_emp1 and alert_date = d_c2 and kind = 'break_exceeded';
 
   insert into test_results(name, expected, got, passed) values
-    ('a break inside the threshold stays silent', '0', v_count::text, v_count = 0);
+    ('a break over sixty minutes raises immediately', '1', v_count::text, v_count = 1);
 
   -- ================================================= PHASE D: missing_exit ===
   -- Expected out at 18:00, threshold sixty minutes, still open at 19:30.

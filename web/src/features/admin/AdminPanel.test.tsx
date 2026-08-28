@@ -285,6 +285,28 @@ it('warns that an alert nobody is named on goes nowhere', async () => {
   expect(rules.length).toBeGreaterThan(0);
 });
 
+it('starts a department override from the company values it inherits', async () => {
+  listAlertRules.mockResolvedValue([
+    rule({ id: 'late', kind: 'late_entry', threshold_minutes: 10 }),
+    rule({ id: 'break', kind: 'break_exceeded', threshold_minutes: 0 }),
+    rule({ id: 'signal', kind: 'no_connection', threshold_minutes: 20 }),
+  ]);
+
+  render(<AdminPanel />);
+  await userEvent.click(await screen.findByRole('tab', { name: 'Alertas' }));
+  await userEvent.selectOptions(screen.getByLabelText('Alcance de las reglas'), 'd1');
+
+  const thresholdFor = (label: string): HTMLInputElement => {
+    const row = screen.getByText(label).closest('.admin__rule');
+    expect(row).not.toBeNull();
+    return within(row as HTMLElement).getByLabelText('Umbral');
+  };
+
+  expect(thresholdFor('Entrada tardía')).toHaveValue(10);
+  expect(thresholdFor('Pausa excedida')).toHaveValue(0);
+  expect(thresholdFor('Sin señal')).toHaveValue(20);
+});
+
 it('sends a blank recipient list as none, not as an empty string', async () => {
   listAlertRules.mockResolvedValue([
     rule({ id: 'r1', kind: 'late_entry', recipients: 'rh@example.invalid' }),

@@ -269,13 +269,17 @@ directly, so the filter cannot be "fixed" into a `where` clause later.
 
 **What the board counts, it counts on purpose.** Not everybody punches every
 day -- some days are worked from the office, and this system only ever sees the
-Home Office ones. That makes an absence evidence of nothing, so `missing_entry`,
-`missing_exit` and `break_exceeded` step aside by default. Three kinds survive,
-and the test is whether the alert is a recorded fact or a silence this tool
-created: `late_entry` and `early_exit` are both the clock saying when somebody
-was here, and `clock_tampered` is the one alert somebody had to cause on purpose. The ones that step aside are
-counted where they were hidden and one press brings them back -- an alert that
-vanishes without trace is how an alert gets lost.
+Home Office ones. That makes an absence evidence of nothing, so `missing_entry`
+and `missing_exit` step aside by default. Four kinds survive, and the test is
+whether a recorded timestamp or heartbeat stands behind the alert: `late_entry`
+and `early_exit` are the clock saying when somebody was here, `break_exceeded`
+is measured from the break's own punches, and `no_connection` is a day that went
+quiet while it was still open. `clock_tampered` and `review_offline` step aside
+alongside the absences, for a different reason: both say something is wrong with
+a *record* rather than with a day, and Revisión -- where `decide_alert()` is
+reached -- is where a record gets judged. The ones that step aside are counted
+where they were hidden and one press brings them back -- an alert that vanishes
+without trace is how an alert gets lost.
 
 **Reportes is the same rule over a period instead of a day.** `attendance_report()`
 takes a scope -- `day`, `week` or `month` -- and an anchor, and resolves the

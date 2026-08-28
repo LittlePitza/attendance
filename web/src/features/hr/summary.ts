@@ -237,35 +237,27 @@ export function cumulativeArrivals(buckets: readonly HourBucket[]): ArrivalPoint
 }
 
 /**
- * The alert kinds Home Office can actually be judged on.
+ * The four events this Home Office tool can act on without inferring absence.
  *
- * Not everybody punches every day -- some days are worked from the office, and
- * this tool only ever sees the Home Office ones. That makes an *absence* prove
- * nothing: `missing_entry`, `missing_exit` and `break_exceeded` all describe a
- * day that may simply have been worked somewhere this system cannot see.
- *
- * Two kinds survive that reasoning, and for opposite reasons:
- *
- *   * `late_entry` -- the person was here and the clock says when. That is a
- *     recorded fact about a Home Office day, not an inference from silence.
- *   * `clock_tampered` -- the evaluator raises it at fifteen minutes of skew,
- *     "where it stops looking like drift". It is the one alert in the set that
- *     somebody had to cause on purpose, it is `high` severity in the database,
- *     and this board is its only surface. Filing it away with the absences
- *     would hide the single thing here nobody should be able to hide.
+ * Every kind is backed by a recorded timestamp or heartbeat: somebody arrived,
+ * left, accumulated break time, or stopped reporting while their day was open.
+ * Other alerts remain available through the explicit "other types" control;
+ * they are not silently discarded.
  */
-export const COUNTABLE_ALERT_KINDS: readonly AlertKind[] = [
+export const OPERATIONAL_ALERT_KINDS: readonly AlertKind[] = [
   'late_entry',
-  // Same standing as a late arrival, and for the same reason: the person was
-  // here, they clocked out, and the clock says when. It is a recorded fact
-  // rather than a silence this tool created, which is the whole test for
-  // whether a kind belongs in this list.
   'early_exit',
-  'clock_tampered',
+  'break_exceeded',
+  'no_connection',
 ];
 
+export function operational(alerts: readonly OpenAlert[]): OpenAlert[] {
+  return alerts.filter((alert) => OPERATIONAL_ALERT_KINDS.includes(alert.kind));
+}
+
+/** @deprecated Use `operational`; kept during the view migration. */
 export function countable(alerts: readonly OpenAlert[]): OpenAlert[] {
-  return alerts.filter((alert) => COUNTABLE_ALERT_KINDS.includes(alert.kind));
+  return operational(alerts);
 }
 
 /**

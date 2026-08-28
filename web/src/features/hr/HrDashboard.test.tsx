@@ -334,7 +334,7 @@ describe('HrDashboard', () => {
     expect(await screen.findByText(/Nadie coincide con este filtro/)).toBeInTheDocument();
   });
 
-  it('counts what it can judge and keeps the rest one click away', async () => {
+  it('counts the four operational kinds and keeps every other kind one explicit click away', async () => {
     openAlerts.mockResolvedValue([
       {
         id: 'a1',
@@ -372,32 +372,43 @@ describe('HrDashboard', () => {
         created_at: '2026-08-24T15:30:00Z',
         notified_at: null,
       },
+      {
+        id: 'a4',
+        employee_id: '2',
+        employee_name: 'Beto Lara',
+        alert_date: TODAY,
+        kind: 'break_exceeded',
+        severity: 'low',
+        state: 'open',
+        details: { break_minutes: 75, allowed_minutes: 60 },
+        created_at: '2026-08-24T15:35:00Z',
+        notified_at: null,
+      },
     ]);
 
     show();
     await screen.findByText('Ana Ruiz');
 
-    // Home Office means nobody is expected to punch every day, so the absence
-    // steps aside. The late entry and the moved clock are both evidence.
+    // These two events are recorded facts on a Home Office day. The absence and
+    // the technical clock alert remain available, but do not define the default
+    // operational queue.
     const stats = screen.getByRole('region', { name: 'Resumen del día' });
     const counter = within(stats).getByRole('button', { name: /Alertas/ });
     await waitFor(() => expect(counter).toHaveAccessibleName(/Alertas2.*2 personas/));
 
     await userEvent.click(navLink(/Alertas/));
 
-    expect(await screen.findByText('Entrada tardía')).toBeInTheDocument();
-    expect(screen.getByText('Reloj fuera de hora')).toBeInTheDocument();
-    expect(screen.queryByText('Sin entrada')).not.toBeInTheDocument();
-    expect(screen.getByText(/1 alerta oculta/)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Entrada tardía.*Ana Ruiz/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Pausa excedida.*Beto Lara/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Reloj fuera de hora.*Beto Lara/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Sin entrada.*Carla Sosa/ })).toBeNull();
+    expect(screen.getByText(/2 alertas de otros tipos están/)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Solo las que cuentan' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Incluir otros tipos 2' }));
 
-    expect(await screen.findByText('Sin entrada')).toBeInTheDocument();
-    expect(screen.getByText('Entrada tardía')).toBeInTheDocument();
-
-    // The subtitle counts what is on screen. Describing one alta while showing
-    // two altas and a media is the summary disagreeing with its own list.
-    expect(screen.getByText('2 altas · 1 media · 0 bajas')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Sin entrada.*Carla Sosa/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Reloj fuera de hora.*Beto Lara/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Entrada tardía.*Ana Ruiz/ })).toBeInTheDocument();
   });
 
   it('counts alerts on the row of the person they belong to', async () => {
@@ -429,8 +440,11 @@ describe('HrDashboard', () => {
     const panel = await screen.findByRole('heading', { name: 'Alertas abiertas' });
     const card = panel.closest('section');
     expect(card).not.toBeNull();
-    expect(within(card as HTMLElement).getByText('Entrada tardía')).toBeInTheDocument();
-    expect(within(card as HTMLElement).getByText(/42 min/)).toBeInTheDocument();
+    const alertRow = within(card as HTMLElement).getByRole('button', {
+      name: /Entrada tardía.*Carla Sosa/,
+    });
+    expect(alertRow).toBeInTheDocument();
+    expect(within(alertRow).getByText(/42 min/)).toBeInTheDocument();
   });
 
   it('moves between the team and the alerts, and marks where you are', async () => {
@@ -467,7 +481,7 @@ describe('HrDashboard', () => {
     show();
     await screen.findByText('Ana Ruiz');
     await userEvent.click(navLink(/Alertas/));
-    await screen.findByText('Entrada tardía');
+    await screen.findByRole('button', { name: /Entrada tardía.*Ana Ruiz/ });
 
     expect(screen.queryByRole('button', { name: /descartar|cerrar|resolver/i })).toBeNull();
   });

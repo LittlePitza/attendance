@@ -31,10 +31,9 @@ import {
   cumulativeArrivals,
   departmentsOf,
   employeesWithAlerts,
-  countable,
   entryHistogram,
-  filterAlerts,
   filterTeam,
+  operational,
   punchable,
   summarise,
   withoutAccount,
@@ -84,7 +83,6 @@ export function HrDashboard({
   const [department, setDepartment] = useState<string>('all');
   const [homeOfficeOnly, setHomeOfficeOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [countableOnly, setCountableOnly] = useState(true);
   const [showWithoutAccount, setShowWithoutAccount] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [reviewing, setReviewing] = useState<string | null>(null);
@@ -140,41 +138,13 @@ export function HrDashboard({
     [boardTeam, query, state, department, homeOfficeOnly],
   );
 
-  /**
-   * What this tool can actually judge is what it counts.
-   *
-   * The rest are not discarded -- `hiddenAlerts` says how many stepped aside
-   * and the toggle brings them back -- because an alert that vanishes with no
-   * trace is the way an alert gets lost.
-   */
-  const countedAlerts = useMemo(() => countable(alerts.alerts), [alerts.alerts]);
+  /** The four recorded events this Home Office queue can act on. */
+  const operationalAlerts = useMemo(() => operational(alerts.alerts), [alerts.alerts]);
 
-  const visibleAlerts = useMemo(
-    () => filterAlerts(alerts.alerts, query, countableOnly),
-    [alerts.alerts, query, countableOnly],
+  const operationalSeverities = useMemo(
+    () => countBySeverity(operationalAlerts),
+    [operationalAlerts],
   );
-
-  const hiddenAlerts = alerts.alerts.length - countedAlerts.length;
-
-  /**
-   * The alerts the panel is describing right now.
-   *
-   * The toggle can widen the list to every kind, and a heading still counting
-   * only the countable ones would be the summary disagreeing with the rows
-   * underneath it.
-   */
-  const shownAlerts = countableOnly ? countedAlerts : alerts.alerts;
-
-  const severities = useMemo(() => countBySeverity(shownAlerts), [shownAlerts]);
-
-  /**
-   * The day's counter answers for the day, not for the alert view's toggle.
-   *
-   * Its figure, its caption and its pill all read `countedAlerts`, so the card
-   * can never show a count of one beside a pill claiming a severity that count
-   * does not include.
-   */
-  const countedSeverities = useMemo(() => countBySeverity(countedAlerts), [countedAlerts]);
 
   /**
    * The selected person, resolved against the board rather than remembered.
@@ -210,11 +180,11 @@ export function HrDashboard({
 
   const alertsByEmployee = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const alert of countedAlerts) {
+    for (const alert of operationalAlerts) {
       counts.set(alert.employee_id, (counts.get(alert.employee_id) ?? 0) + 1);
     }
     return counts;
-  }, [countedAlerts]);
+  }, [operationalAlerts]);
 
   const step = useCallback((days: number): void => setDate(shiftDate(shownDate, days)), [shownDate]);
 
@@ -300,7 +270,7 @@ export function HrDashboard({
       <Sidebar
         view={view}
         onView={setView}
-        alertCount={countedAlerts.length}
+        alertCount={operationalAlerts.length}
         reviewCount={summary.needsReview}
         canAdminister={CONFIGURING_ROLES.includes(profile.role)}
         profile={profile}
@@ -434,17 +404,17 @@ export function HrDashboard({
             <StatCard
               index={4}
               label="Alertas"
-              value={countedAlerts.length}
+              value={operationalAlerts.length}
               caption={
-                countedAlerts.length === 0
+                operationalAlerts.length === 0
                   ? 'Nada pendiente'
-                  : plural(employeesWithAlerts(countedAlerts), 'persona', 'personas')
+                  : plural(employeesWithAlerts(operationalAlerts), 'persona', 'personas')
               }
               icon={<IconAlert />}
-              {...(countedSeverities.high > 0
+              {...(operationalSeverities.high > 0
                 ? {
                     pill: {
-                      text: plural(countedSeverities.high, 'alta', 'altas'),
+                      text: plural(operationalSeverities.high, 'alta', 'altas'),
                       tone: 'bad' as const,
                     },
                   }
@@ -577,51 +547,34 @@ export function HrDashboard({
                 <div>
                   <h2 className="panel__title">Alertas abiertas</h2>
                   <p className="panel__subtitle">
-                    {shownAlerts.length === 0
-                      ? 'Nada que revisar.'
-                      : `${plural(severities.high, 'alta', 'altas')} · ${plural(
-                          severities.medium,
-                          'media',
-                          'medias',
-                        )} · ${plural(severities.low, 'baja', 'bajas')}`}
+                    {operationalAlerts.length === 0
+                      ? 'Sin alertas operativas por revisar.'
+                      : `${plural(operationalAlerts.length, 'alerta operativa', 'alertas operativas')} · ${plural(
+                          operationalSeverities.high,
+                          'alta',
+                          'altas',
+                        )} · ${plural(operationalSeverities.medium, 'media', 'medias')} · ${plural(
+                          operationalSeverities.low,
+                          'baja',
+                          'bajas',
+                        )}`}
                   </p>
                 </div>
-                <div className="panel__tools">
-                  {(hiddenAlerts > 0 || !countableOnly) && (
-                    <button
-                      className={countableOnly ? 'btn btn--on' : 'btn'}
-                      type="button"
-                      /* Stable label, moving state. A caption that flipped
-                        * alongside `aria-pressed` would announce the next
-                        * action and the current state at once, contradicting
-                        * itself. */
-                      aria-pressed={countableOnly}
-                      onClick={() => setCountableOnly((only) => !only)}
-                    >
-                      Solo las que cuentan
-                    </button>
-                  )}
-                  {query !== '' && (
+                {query !== '' && (
+                  <div className="panel__tools">
                     <button className="btn" type="button" onClick={clearFilters}>
-                      Limpiar
+                      Limpiar búsqueda
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
 
-              {/* The live region is always in the tree and only its text
-                * changes. Mounting it together with its message is one of the
-                * two reliable ways to make a status announcement never fire. */}
-              <p className="note" role="status" aria-live="polite">
-                {countableOnly && hiddenAlerts > 0
-                  ? `${plural(hiddenAlerts, 'alerta oculta', 'alertas ocultas')} de otro tipo. ` +
-                    'Pulsa «Solo las que cuentan» para verlas. En Home Office no se espera que ' +
-                    'todos marquen cada día, así que una ausencia no prueba nada: aquí cuentan ' +
-                    'las entradas tardías y los relojes fuera de hora.'
-                  : ''}
-              </p>
-
-              <AlertsPanel alerts={visibleAlerts} timeZone={timeZone} boardDate={shownDate} />
+              <AlertsPanel
+                alerts={alerts.alerts}
+                query={query}
+                timeZone={timeZone}
+                boardDate={shownDate}
+              />
             </section>
           ) : view === 'reports' ? (
             <ReportsPanel

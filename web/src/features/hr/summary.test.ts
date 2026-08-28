@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { OpenAlert, TeamMember, WorkdayState } from '../../lib/types';
 import {
   countBySeverity,
-  countable,
   cumulativeArrivals,
   departmentsOf,
   employeesWithAlerts,
   entryHistogram,
   filterAlerts,
   filterTeam,
+  operational,
   punchable,
   summarise,
   withoutAccount,
@@ -244,19 +244,17 @@ describe('alert counting', () => {
     ).toBe(2);
   });
 
-  it('never buries a tampered clock, which is evidence rather than an absence', () => {
+  it('keeps the four operational events and leaves inferred or technical alerts aside', () => {
     const raised = [
       alert({ id: '1', kind: 'late_entry' }),
-      alert({ id: '2', kind: 'missing_entry' }),
-      alert({ id: '3', kind: 'clock_tampered' }),
-      alert({ id: '4', kind: 'break_exceeded' }),
-      alert({ id: '5', kind: 'missing_exit' }),
+      alert({ id: '2', kind: 'early_exit' }),
+      alert({ id: '3', kind: 'break_exceeded' }),
+      alert({ id: '4', kind: 'no_connection' }),
+      alert({ id: '5', kind: 'missing_entry' }),
+      alert({ id: '6', kind: 'clock_tampered' }),
     ];
 
-    // A day nobody punched proves nothing when working from the office is an
-    // option. A clock running a quarter of an hour off is not an absence at
-    // all: it is the one thing here somebody had to do on purpose.
-    expect(countable(raised).map((entry) => entry.id)).toEqual(['1', '3']);
+    expect(operational(raised).map((entry) => entry.id)).toEqual(['1', '2', '3', '4']);
   });
 });
 

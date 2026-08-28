@@ -65,6 +65,17 @@ export function describeWeekSpan(startDow: number): string {
   return end === undefined ? 'Semana completa' : `De ${start.long} a ${end.long}`;
 }
 
+export const ALERT_RULE_DEFAULTS: Readonly<Record<AlertKind, number>> = {
+  late_entry: 10,
+  missing_entry: 0,
+  break_exceeded: 0,
+  missing_exit: 60,
+  early_exit: 15,
+  no_connection: 20,
+  review_offline: 0,
+  clock_tampered: 15,
+};
+
 /**
  * What the threshold on each rule counts, because the number means something
  * different in every row and a bare "minutos" would be misleading.

@@ -4,7 +4,7 @@ import { describeReadFailure } from '../../../lib/errors';
 import { ALERT_KINDS, type AlertRuleRow, type DepartmentRow } from '../../../lib/types';
 import { IconAlert } from '../../hr/components/icons';
 import { ALERT_LABELS } from '../../hr/labels';
-import { THRESHOLD_MEANING } from '../labels';
+import { ALERT_RULE_DEFAULTS, THRESHOLD_MEANING } from '../labels';
 
 /**
  * What raises an alert, and who gets told.
@@ -94,23 +94,29 @@ export function AlertRulesSection({
           <RuleRow key={rule.id} rule={rule} onChanged={onChanged} />
         ))}
 
-        {missing.map((kind) => (
-          <RuleRow
-            key={`new-${kind}`}
-            rule={{
-              id: `new-${kind}`,
-              department_id: scopeId === '' ? null : scopeId,
-              department: '',
-              kind,
-              active: true,
-              threshold_minutes: 15,
-              recipients: null,
-              updated_at: '',
-            }}
-            isNew
-            onChanged={onChanged}
-          />
-        ))}
+        {missing.map((kind) => {
+          const inherited = scopeId === ''
+            ? undefined
+            : rules.find((rule) => rule.department_id === null && rule.kind === kind);
+
+          return (
+            <RuleRow
+              key={`new-${kind}`}
+              rule={{
+                id: `new-${kind}`,
+                department_id: scopeId === '' ? null : scopeId,
+                department: '',
+                kind,
+                active: inherited?.active ?? true,
+                threshold_minutes: inherited?.threshold_minutes ?? ALERT_RULE_DEFAULTS[kind],
+                recipients: inherited?.recipients ?? null,
+                updated_at: '',
+              }}
+              isNew
+              onChanged={onChanged}
+            />
+          );
+        })}
       </div>
     </section>
   );
