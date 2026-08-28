@@ -3,6 +3,7 @@ import type {
   AlertKind,
   AlertSeverity,
   AlertState,
+  ConnectionState,
   PunchDecision,
   PunchKind,
   SessionEndReason,
@@ -27,6 +28,48 @@ export const STATE_LABELS: Readonly<Record<WorkdayState, string>> = {
   on_break: 'En pausa',
   finished: 'Terminada',
 };
+
+/**
+ * What the signal is doing, in words.
+ *
+ * Deliberately not "conectado": the board knows when a machine last reported,
+ * which is not the same as somebody being at it. `lost` says the day stopped
+ * reporting and leaves what that was worth to whoever reads it -- the same
+ * division the alert keeps.
+ */
+export const CONNECTION_LABELS: Readonly<Record<ConnectionState, string>> = {
+  live: 'Reportando',
+  stale: 'Sin señal',
+  lost: 'Sin reportar',
+};
+
+/**
+ * The signal as a sentence, for a tooltip and for a screen reader.
+ *
+ * The minutes are rounded from the seconds the database sent rather than
+ * recomputed from a timestamp here, so the number on screen is the number the
+ * classification was made from.
+ */
+export function describeConnection(
+  connection: ConnectionState,
+  seconds: number | null | undefined,
+): string {
+  const minutes = typeof seconds === 'number' ? Math.floor(seconds / 60) : null;
+
+  if (connection === 'live') {
+    return minutes === null || minutes < 1
+      ? 'Reportó hace menos de un minuto'
+      : `Reportó hace ${plural(minutes, 'minuto', 'minutos')}`;
+  }
+
+  const since = minutes === null
+    ? 'un rato'
+    : plural(minutes, 'minuto', 'minutos');
+
+  return connection === 'stale'
+    ? `Sin señal desde hace ${since}; puede ser un latido perdido`
+    : `Sin reportar desde hace ${since}`;
+}
 
 export const SEVERITY_LABELS: Readonly<Record<AlertSeverity, string>> = {
   high: 'Alta',

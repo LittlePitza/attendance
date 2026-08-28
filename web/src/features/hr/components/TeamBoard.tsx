@@ -1,6 +1,14 @@
 import type { CSSProperties, JSX } from 'react';
-import type { TeamMember, WorkdayState } from '../../../lib/types';
-import { formatClock, formatScheduleTime, formatTime, plural, STATE_LABELS } from '../labels';
+import type { ConnectionState, TeamMember, WorkdayState } from '../../../lib/types';
+import {
+  CONNECTION_LABELS,
+  describeConnection,
+  formatClock,
+  formatScheduleTime,
+  formatTime,
+  plural,
+  STATE_LABELS,
+} from '../labels';
 import { IconOffline, IconReview } from './icons';
 
 const TONES: Readonly<Record<WorkdayState, string>> = {
@@ -72,8 +80,11 @@ export function TeamBoard({
               aria-label={`${open ? 'Cerrar' : 'Abrir'} ficha de ${member.employee_name}, ${
                 member.department ?? 'sin departamento'
               }, ${STATE_LABELS[member.state].toLowerCase()}${
-                alerts > 0 ? `, ${plural(alerts, 'alerta', 'alertas')}` : ''
-              }`}
+                member.connection ? `, ${describeConnection(
+                  member.connection,
+                  member.seconds_since_signal,
+                ).toLowerCase()}` : ''
+              }${alerts > 0 ? `, ${plural(alerts, 'alerta', 'alertas')}` : ''}`}
               onClick={() => onSelect(member.employee_id)}
             >
               <span className="row__avatar" aria-hidden="true">
@@ -85,9 +96,17 @@ export function TeamBoard({
               </span>
             </button>
 
-            <span className={`state state--${TONES[member.state]}`}>
-              <span className="dot" aria-hidden="true" />
-              {STATE_LABELS[member.state]}
+            <span className="row__state">
+              <span className={`state state--${TONES[member.state]}`}>
+                <span className="dot" aria-hidden="true" />
+                {STATE_LABELS[member.state]}
+              </span>
+              {member.connection && (
+                <Signal
+                  connection={member.connection}
+                  seconds={member.seconds_since_signal ?? null}
+                />
+              )}
             </span>
 
             <span className="row__times">
@@ -121,9 +140,12 @@ export function TeamBoard({
                 </span>
               )}
               {member.has_offline && (
-                <span className="pill pill--mute" title="Registró marcajes sin conexión">
+                <span
+                  className="pill pill--mute"
+                  title="Algún marcaje del día se registró sin conexión y se sincronizó después"
+                >
                   <IconOffline />
-                  Sin conexión
+                  Sincronizado
                 </span>
               )}
             </span>
@@ -131,6 +153,41 @@ export function TeamBoard({
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * Whether the machine behind an open day is still reporting.
+ *
+ * It renders for `live` as well as for the two bad states, and that is
+ * deliberate: a row that showed nothing when everything was fine would leave
+ * "reporting" and "this column has not loaded" looking identical, which is the
+ * failure this whole indicator exists to end.
+ *
+ * The minutes come from the database's own count, and the band was decided
+ * there too -- `internal.signal_state()`. Nothing here knows what twenty
+ * minutes means.
+ */
+function Signal({
+  connection,
+  seconds,
+}: {
+  readonly connection: ConnectionState;
+  readonly seconds: number | null;
+}): JSX.Element {
+  const minutes = seconds === null ? null : Math.floor(seconds / 60);
+  const description = describeConnection(connection, seconds);
+
+  return (
+    <span className={`signal signal--${connection}`} title={description}>
+      <span className="signal__dot" aria-hidden="true" />
+      <span className="signal__text">
+        {CONNECTION_LABELS[connection]}
+        {connection !== 'live' && minutes !== null && (
+          <span className="signal__age"> {String(minutes)} min</span>
+        )}
+      </span>
+    </span>
   );
 }
 

@@ -19,6 +19,15 @@ export type WorkdayState = (typeof WORKDAY_STATES)[number];
 
 export type PunchSource = 'online' | 'offline';
 
+/**
+ * Whether an open workday is still reporting, as resolved by
+ * `internal.signal_state()`. The bands are not decided here: `lost` is the
+ * `no_connection` threshold, which is configurable per department, and the
+ * client would have to read `alert_rules` to know it.
+ */
+export const CONNECTION_STATES = ['live', 'stale', 'lost'] as const;
+export type ConnectionState = (typeof CONNECTION_STATES)[number];
+
 /** Times are `HH:MM` in the employee's own zone, already formatted by Postgres. */
 export interface DaySchedule {
   readonly name: string;
@@ -217,6 +226,16 @@ export interface TeamMember {
    * not read that as "nobody can punch" and empty itself.
    */
   readonly has_account?: boolean;
+  /**
+   * How long this workday has been silent, and what the database makes of it.
+   *
+   * Both null unless the day is open: the PWA only beats while it is, so a day
+   * that never started or already finished has no silence to measure. Optional
+   * for the same reason `has_account` is -- a bundle and a migration never
+   * deploy together, and until `team_day()` reports them the keys are absent.
+   */
+  readonly seconds_since_signal?: number | null;
+  readonly connection?: ConnectionState | null;
 }
 
 export interface OpenAlert {

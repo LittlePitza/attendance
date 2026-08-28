@@ -246,6 +246,49 @@ facts the database already reported; lateness arrives as a `late_entry` alert.
 It also offers no way to close one, because an alert is a record of what
 happened rather than a notification to clear.
 
+**And whether the machine is still reporting.** `team_day()` returned
+`last_heartbeat` from the day it was written and no screen ever drew it, so a
+laptop that died at 11:20 looked exactly like somebody working: state `working`,
+counter advancing, and nothing said otherwise until `no_connection` appeared
+twenty minutes later on a different tab. The signal was in the payload the whole
+time; what was missing was one resolved answer to "is this still reporting?".
+
+That answer is a judgement, so it is resolved in SQL for the same reason the
+board never works out who was late. `internal.signal_lost_after()` resolves the
+threshold -- department, then global, then the evaluator's default -- and
+`internal.signal_state()` bands the silence into `live`, `stale` or `lost`. The
+split is the one `internal.week_start()` already makes: the resolver reads a
+table, so it is `stable` and runs once per row through a lateral, and the banding
+is `immutable` and a single expression, so the planner inlines it. It is
+`SECURITY DEFINER` and returns one integer, because granting
+`internal.alert_rule()` to `authenticated` would have published `recipients` to
+every signed-in employee -- which is exactly what `alert_rules_read` exists to
+prevent.
+
+**The `lost` boundary is the `no_connection` threshold itself**, and
+`read_api_test.sql` asserts that rather than the number, so the screen and the
+alert can never give two answers about one silence. `live` is two of the PWA's
+five-minute beats: one missed beat is jitter, or a browser throttling a timer in
+a window that has been in the background all afternoon, which is how this
+application is actually left open. A department that lowers the threshold below
+ten simply loses the `stale` band instead of inverting the two.
+
+Three things it deliberately does **not** do. It does not consult `active`:
+switching the alert off says "do not tell me about this", not "stop measuring",
+so the indicator stays truthful for a department that turned the alert off. It
+reports a break like any other open day, because the column describes the signal
+and not whether the silence is anybody's business -- the evaluator ignores a
+break, and that judgement stays where it already lives. And it reports `live`
+rather than drawing nothing when all is well, because a row that was blank on a
+good day would make "reporting" and "this column never loaded" identical, which
+is the whole failure the indicator exists to end. For a day that never started
+or has finished, both columns are null: going home is not a fault.
+
+One label had to move for it. `has_offline` was drawn as "Sin conexión" and means
+something else entirely -- a punch recorded offline and synced later -- so beside
+a live signal it read as the same thing said twice. It is "Sincronizado" now, the
+word Revisión already used for it.
+
 **The board is about the people who can punch.** Thirty-two people are active
 and nine have an account; the other twenty-three have no way to clock in, so the
 board used to list them at `not_started` all day, every day -- rows that look

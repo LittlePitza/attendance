@@ -594,6 +594,126 @@ describe('HrDashboard', () => {
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
   });
 
+  it('says on the board whether an open day is still reporting', async () => {
+    teamDay.mockResolvedValue([
+      member({
+        employee_id: '1',
+        has_account: true,
+        connection: 'live',
+        seconds_since_signal: 90,
+      }),
+      member({
+        employee_id: '2',
+        employee_name: 'Beto Lara',
+        has_account: true,
+        connection: 'stale',
+        seconds_since_signal: 12 * 60,
+      }),
+      member({
+        employee_id: '3',
+        employee_name: 'Carla Sosa',
+        has_account: true,
+        connection: 'lost',
+        seconds_since_signal: 25 * 60,
+      }),
+    ]);
+
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    // The one that is fine says so too. A row that showed nothing when all was
+    // well would make "reporting" and "this has not loaded" look identical.
+    expect(screen.getByText('Reportando')).toBeInTheDocument();
+
+    expect(screen.getByText('Sin señal')).toBeInTheDocument();
+    expect(screen.getByText('Sin reportar')).toBeInTheDocument();
+
+    // The age is the database's own count, rounded, not recomputed from a
+    // timestamp in the browser.
+    expect(screen.getByText('12 min')).toBeInTheDocument();
+    expect(screen.getByText('25 min')).toBeInTheDocument();
+
+    // Carla is still `working`: the signal qualifies the state, it does not
+    // replace it. Someone whose laptop died must not read as gone home.
+    expect(screen.getAllByRole('button', { name: /ficha de .*trabajando/i })).toHaveLength(3);
+  });
+
+  it('carries the signal in the row name, so it is not sighted-only', async () => {
+    teamDay.mockResolvedValue([
+      member({
+        employee_id: '3',
+        employee_name: 'Carla Sosa',
+        has_account: true,
+        connection: 'lost',
+        seconds_since_signal: 25 * 60,
+      }),
+    ]);
+
+    show();
+
+    expect(
+      await screen.findByRole('button', { name: /Carla Sosa.*sin reportar desde hace 25 minutos/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('draws no signal at all for a day that is not open', async () => {
+    teamDay.mockResolvedValue([
+      member({
+        employee_id: '1',
+        has_account: true,
+        state: 'finished',
+        connection: null,
+        seconds_since_signal: null,
+      }),
+    ]);
+
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    // Going home is not a fault, so there is nothing to report about it.
+    expect(screen.queryByText('Reportando')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sin reportar')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sin señal')).not.toBeInTheDocument();
+  });
+
+  it('survives a bundle newer than the migration behind it', async () => {
+    // `connection` absent entirely, which is what a deploy window looks like.
+    // The board must draw the row rather than read the gap as "nobody is
+    // reporting" and paint every one of them as lost.
+    teamDay.mockResolvedValue([member({ employee_id: '1', has_account: true })]);
+
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    expect(
+      screen.getByRole('button', { name: /ficha de Ana Ruiz.*trabajando/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Sin reportar')).not.toBeInTheDocument();
+    expect(screen.queryByText('Reportando')).not.toBeInTheDocument();
+  });
+
+  it('does not call a synced punch a lost connection', async () => {
+    // `has_offline` is history about a punch, not a live state. It used to be
+    // labelled "Sin conexión", which beside a real signal read as the same
+    // thing said twice.
+    teamDay.mockResolvedValue([
+      member({
+        employee_id: '1',
+        has_account: true,
+        has_offline: true,
+        connection: 'live',
+        seconds_since_signal: 30,
+      }),
+    ]);
+
+    show();
+    await screen.findByText('Ana Ruiz');
+
+    expect(screen.getByText('Sincronizado')).toBeInTheDocument();
+    expect(screen.getByText('Reportando')).toBeInTheDocument();
+    expect(screen.queryByText('Sin conexión')).not.toBeInTheDocument();
+  });
+
   it('leaves out the people who have no way to punch, and says how many', async () => {
     teamDay.mockResolvedValue([
       member({ employee_id: '1', has_account: true }),

@@ -44,6 +44,7 @@ declare
   v_ok      boolean;
   v_zone    text;
   v_today   date;
+  v_sigday  date;
 
   v_states    text[] := array['not_started', 'working', 'on_break', 'finished'];
   v_advance   text[] := array['clock_in', 'break_start', 'clock_out', null];
@@ -328,6 +329,156 @@ begin
      v_count::text, v_count = 1);
 
   update public.empleados set auth_user_id = v_uid1 where id = v_emp1;
+
+  -- ==================================== PHASE D3: is it still reporting? ===
+  -- The board draws a live signal, and what counts as silence is resolved in
+  -- SQL rather than in the browser. On a date of its own, so the workdays the
+  -- punch phases built are left alone.
+
+  v_sigday := v_today - 200;
+
+  -- A day that never started has no silence to measure.
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid2)::text, true);
+  select count(*) into v_count from public.team_day(v_sigday) t
+   where t.employee_id = v_emp1
+     and t.connection is null and t.seconds_since_signal is null;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('a day that never started reports no signal at all', '1',
+     v_count::text, v_count = 1);
+
+  -- No heartbeat yet: the opening hour is the first signal, or every workday
+  -- would read `lost` for its first minutes.
+  insert into attendance.workdays (
+    employee_id, work_date, state, time_zone, opened_at, last_heartbeat
+  )
+  values (v_emp1, v_sigday, 'working', v_zone, now() - interval '2 minutes', null);
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid2)::text, true);
+  select t.connection into v_text from public.team_day(v_sigday) t
+   where t.employee_id = v_emp1;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('a day just opened counts as reporting, before any beat', 'live',
+     coalesce(v_text, 'null'), v_text = 'live');
+
+  -- Two beats of tolerance, so one missed beat is not a machine that went away.
+  update attendance.workdays set last_heartbeat = now() - interval '4 minutes'
+   where employee_id = v_emp1 and work_date = v_sigday;
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid2)::text, true);
+  select t.connection into v_text from public.team_day(v_sigday) t
+   where t.employee_id = v_emp1;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('a beat four minutes old is still reporting', 'live',
+     coalesce(v_text, 'null'), v_text = 'live');
+
+  update attendance.workdays set last_heartbeat = now() - interval '12 minutes'
+   where employee_id = v_emp1 and work_date = v_sigday;
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid2)::text, true);
+  select t.connection into v_text from public.team_day(v_sigday) t
+   where t.employee_id = v_emp1;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('twelve minutes of silence is doubtful rather than gone', 'stale',
+     coalesce(v_text, 'null'), v_text = 'stale');
+
+  -- The boundary is the `no_connection` threshold itself. This is the assertion
+  -- that stops the screen and the alert giving two answers about one silence.
+  update attendance.workdays
+     set last_heartbeat = now() - make_interval(mins => internal.signal_lost_after(null))
+   where employee_id = v_emp1 and work_date = v_sigday;
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid2)::text, true);
+  select t.connection into v_text from public.team_day(v_sigday) t
+   where t.employee_id = v_emp1;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('at the alert threshold exactly, it is gone', 'lost',
+     coalesce(v_text, 'null'), v_text = 'lost');
+
+  -- A break is measured too. Whether the silence is anybody's business is the
+  -- evaluator's call, and it deliberately ignores a break; this column reports
+  -- the signal, not the verdict.
+  update attendance.workdays set state = 'on_break'
+   where employee_id = v_emp1 and work_date = v_sigday;
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid2)::text, true);
+  select t.connection into v_text from public.team_day(v_sigday) t
+   where t.employee_id = v_emp1;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('a break is measured like any other open day', 'lost',
+     coalesce(v_text, 'null'), v_text = 'lost');
+
+  -- Going home is not a fault.
+  update attendance.workdays set state = 'finished', closed_at = now()
+   where employee_id = v_emp1 and work_date = v_sigday;
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid2)::text, true);
+  select count(*) into v_count from public.team_day(v_sigday) t
+   where t.employee_id = v_emp1
+     and t.connection is null and t.seconds_since_signal is null;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('a finished day reports no signal, rather than a lost one', '1',
+     v_count::text, v_count = 1);
+
+  -- A department threshold moves the boundary, and the same silence reclassifies.
+  update attendance.workdays set state = 'working', closed_at = null,
+         last_heartbeat = now() - interval '12 minutes'
+   where employee_id = v_emp1 and work_date = v_sigday;
+  update public.empleados set department_id = v_dept2 where id = v_emp1;
+
+  insert into attendance.alert_rules (department_id, kind, active, threshold_minutes)
+  values (v_dept2, 'no_connection', true, 5);
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid2)::text, true);
+  select t.connection into v_text from public.team_day(v_sigday) t
+   where t.employee_id = v_emp1;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('a department that lowers the threshold reclassifies the same silence',
+     'lost', coalesce(v_text, 'null'), v_text = 'lost');
+
+  -- Switching the alert off says "do not tell me about this", not "stop
+  -- measuring": the indicator stays truthful.
+  update attendance.alert_rules set active = false
+   where department_id = v_dept2 and kind = 'no_connection';
+
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', v_uid2)::text, true);
+  select t.connection into v_text from public.team_day(v_sigday) t
+   where t.employee_id = v_emp1;
+  perform set_config('role', 'postgres', true);
+
+  insert into test_results(name, expected, got, passed) values
+    ('an alert switched off still leaves a truthful indicator', 'lost',
+     coalesce(v_text, 'null'), v_text = 'lost');
+
+  delete from attendance.alert_rules
+   where department_id = v_dept2 and kind = 'no_connection';
+  delete from attendance.workdays
+   where employee_id = v_emp1 and work_date = v_sigday;
+  update public.empleados set department_id = null where id = v_emp1;
 
   -- ================================================= PHASE E: open_alerts() ===
 
