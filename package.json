@@ -17,6 +17,6 @@
     "db:stop": "node scripts/local-supabase.mjs stop"
   },
   "devDependencies": {
-    "supabase": "2.115.0"
+    "supabase": "2.118.0"
   }
 }
